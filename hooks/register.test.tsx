@@ -16,6 +16,7 @@ const labels = async (ui: { findAll: (q: { type: 'Button' }) => Promise<readonly
 
 test('replies show as buttons under the last message on desktop, and a tap sends one', { options: { mode: 'auto' } }, async ($, on) => {
   const sent: string[] = []
+  const origins: unknown[] = []
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
 
@@ -27,6 +28,7 @@ test('replies show as buttons under the last message on desktop, and a tap sends
   on('prompt.suggest', () => ({ isShown: true }))
   on('prompt.submit', (_, e) => {
     sent.push(e.text)
+    origins.push(e.origin)
 
     return { text: e.text }
   })
@@ -41,6 +43,8 @@ test('replies show as buttons under the last message on desktop, and a tap sends
   expect(await labels(ui)).toEqual(['run the tests', 'commit it'])
   await ui.press({ key: 'reply-0' })
   expect(sent).toEqual(['run the tests'])
+  // Sent as the person's own words, not framed as the plugin's message.
+  expect(origins).toEqual([{ kind: 'plugin', name: 'suggest', asUser: true }])
   await ui.unmount()
 })
 

@@ -1,7 +1,7 @@
 {
   "name": "suggest",
   "displayName": "Suggest",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Clickable suggested replies under Claude's last message",
   "author": {
     "name": "Alex Pakhaliuk"

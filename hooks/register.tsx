@@ -224,10 +224,11 @@ export const register: Register = (on, options) => {
       await $.prompt.fill({ text })
     }
     // Sends the reply, or runs it when it is a slash command; an unknown command goes to the box instead.
+    // The person picked it, so it goes as their own words, not framed as the plugin's message.
     const send = (text: string) => async () => {
       await update($, chips, () => null)
       const cmd = asCommand(text)
-      if (!cmd) return void (await $.prompt.submit({ text }))
+      if (!cmd) return void (await $.prompt.submit({ text, asUser: true }))
       const ran = await $.command.run(cmd).then(
         () => true,
         () => false,
