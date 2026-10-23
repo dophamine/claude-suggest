@@ -1,0 +1,4 @@
+# Compiled output; the mod loads hooks/register.tsx directly
+hooks/*.js
+node_modules/
+.DS_Store
