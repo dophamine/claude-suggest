@@ -101,6 +101,27 @@ test('when Claude Code\'s own suggestion repeats a model reply, the buttons stil
   expect(await optionsShown($, on, 'A game or toy')).toEqual(['A game or toy', 'A tool for my daily routine', 'Something that automates a chore'])
 })
 
+test('a late suggestion from Claude Code does not reorder the shown buttons', { options: { mode: 'auto', maxReplies: 4 } }, async ($, on) => {
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  const clock = mock.clock(on)
+  on('model.complete', () => ({ value: { isAnswered: true, text: OPTIONS, usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }))
+  on('prompt.suggest', () => ({ isShown: true }))
+
+  await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
+  await clock.settle()
+  // Differs from a shown reply only in case and punctuation, so it is the same reply.
+  await $.prompt.suggest({ text: 'a game or toy.', origin: { kind: 'suggestion' } })
+  await $.prompt.suggest({ text: 'run the tests', origin: { kind: 'suggestion' } })
+  const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
+  expect(await labels(ui)).toEqual(['A tool for my daily routine', 'A game or toy', 'Something that automates a chore', 'run the tests'])
+  await ui.unmount()
+})
+
 test('with one reply allowed, only Claude Code\'s own suggestion shows and no model is called', { options: { maxReplies: 1 } }, async ($, on) => {
   let calls = 0
   on('ui.render', ($, e) => {

@@ -69,13 +69,16 @@ const asCommand = (text: string) => {
   return m?.[1] ? { command: m[1], args: (m[2] ?? '').trim() } : null
 }
 
+// Replies that differ only in case or punctuation are one reply.
+const sameKey = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}/]+/gu, ' ').trim()
+
 const merge = (a: string[], b: string[], max: number) => {
   const seen = new Set<string>()
 
   return [...a, ...b]
     .filter(sendable)
     .filter(x => {
-      const k = x.toLowerCase()
+      const k = sameKey(x)
       if (seen.has(k)) return false
       seen.add(k)
 
@@ -203,12 +206,15 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  // The engine's own dim prompt suggestion becomes the first chip.
+  // The engine's own dim prompt suggestion becomes the first chip. Once the model's chips show,
+  // a late one only takes a free slot at the end: shown buttons never move under the cursor.
   on('prompt.suggest', { origin: { kind: 'suggestion' } }, async ($, e, next) => {
     const text = bareCommand(norm(e.text))
     if (text) {
       await update($, last, l => (l ? { ...l, engine: text } : l))
-      await update($, chips, c => (c ? { ...c, items: merge([text], c.items, max) } : c))
+      await update($, chips, c =>
+        c ? { ...c, items: c.isLoading ? merge([text], c.items, max) : merge(c.items, [text], max) } : c,
+      )
     }
 
     return next(e)
