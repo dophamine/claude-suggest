@@ -90,6 +90,7 @@ git clone https://github.com/dophamine/claude-suggest
 cd claude-suggest
 claude plugin validate .
 claude plugin test .
+npx prettier@3.3.3 --write .
 claude --plugin-dir .
 ```
 

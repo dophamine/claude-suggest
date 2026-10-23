@@ -12,6 +12,6 @@ export type Last = { answer: string; engine?: string }
 
 declare module 'claude-code' {
   interface PluginState {
-    'suggest': { chips: Chips | null; recent: Message[]; last: Last | null }
+    suggest: { chips: Chips | null; recent: Message[]; last: Last | null }
   }
 }

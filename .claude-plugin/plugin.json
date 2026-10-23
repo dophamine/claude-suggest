@@ -9,35 +9,21 @@
   "homepage": "https://github.com/dophamine/claude-suggest",
   "repository": "https://github.com/dophamine/claude-suggest",
   "license": "MIT",
-  "keywords": [
-    "suggestions",
-    "replies",
-    "buttons",
-    "prompt",
-    "haiku",
-    "terminal"
-  ],
+  "keywords": ["suggestions", "replies", "buttons", "prompt", "haiku", "terminal"],
   "types": "./types/index.d.ts",
   "userConfig": {
     "mode": {
       "type": "string",
       "title": "Suggest › Mode",
       "description": "Claude Code's own suggestion always shows (free). auto: extra replies after every reply. smart: only when Claude asks or offers something. manual: only when you run /suggest.",
-      "options": [
-        "auto",
-        "smart",
-        "manual"
-      ],
+      "options": ["auto", "smart", "manual"],
       "default": "smart"
     },
     "click": {
       "type": "string",
       "title": "Suggest › Click",
       "description": "send: a click sends the reply (✎ next to it puts it in the input instead). fill: a click puts it in the input, Enter to send.",
-      "options": [
-        "send",
-        "fill"
-      ],
+      "options": ["send", "fill"],
       "default": "send"
     },
     "maxReplies": {
@@ -52,24 +38,14 @@
       "type": "string",
       "title": "Suggest › Model",
       "description": "Model that writes the extra replies",
-      "options": [
-        "haiku",
-        "sonnet",
-        "opus"
-      ],
+      "options": ["haiku", "sonnet", "opus"],
       "default": "haiku"
     },
     "effort": {
       "type": "string",
       "title": "Suggest › Effort",
       "description": "How hard that model thinks. Low is fastest and cheapest.",
-      "options": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
+      "options": ["low", "medium", "high", "xhigh", "max"],
       "default": "low"
     },
     "contextChars": {

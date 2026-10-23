@@ -11,12 +11,55 @@ const MESSAGE = {
 } as const
 
 // The reply buttons, without the ✎ beside each.
-const labels = async (ui: { findAll: (q: { type: 'Button' }) => Promise<readonly { key?: string | null; props: { label?: string } }[]> }) =>
-  (await ui.findAll({ type: 'Button' })).filter(b => String(b.key).startsWith('reply-')).map(b => b.props.label)
+const labels = async (ui: {
+  findAll: (q: { type: 'Button' }) => Promise<readonly { key?: string | null; props: { label?: string } }[]>
+}) => (await ui.findAll({ type: 'Button' })).filter(b => String(b.key).startsWith('reply-')).map(b => b.props.label)
 
-test('replies show as buttons under the last message on desktop, and a tap sends one', { options: { mode: 'auto' } }, async ($, on) => {
-  const sent: string[] = []
-  const origins: unknown[] = []
+test(
+  'replies show as buttons under the last message on desktop, and a tap sends one',
+  { options: { mode: 'auto' } },
+  async ($, on) => {
+    const sent: string[] = []
+    const origins: unknown[] = []
+    on('ui.render', ($, e) => {
+      const { Text } = $.ui.resolve(e)
+
+      return <Text>engine</Text>
+    })
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const clock = mock.clock(on)
+    on('model.complete', () => ({
+      value: {
+        isAnswered: true,
+        text: '["commit it", "2", "run the tests"]',
+        usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      },
+    }))
+    on('prompt.suggest', () => ({ isShown: true }))
+    on('prompt.submit', (_, e) => {
+      sent.push(e.text)
+      origins.push(e.origin)
+
+      return { text: e.text }
+    })
+
+    await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
+    await $.prompt.suggest({ text: 'run the tests', origin: { kind: 'suggestion' } })
+    await clock.settle()
+
+    const ui = await $.ui.mount({ ...MESSAGE, surface: 'desktop' })
+    const first = await ui.find({ type: 'Button', key: 'reply-0' })
+    expect(first?.props.label).toBe('run the tests')
+    expect(await labels(ui)).toEqual(['run the tests', 'commit it'])
+    await ui.press({ key: 'reply-0' })
+    expect(sent).toEqual(['run the tests'])
+    // Sent as the person's own words, not framed as the plugin's message.
+    expect(origins).toEqual([{ kind: 'plugin', name: 'suggest', asUser: true }])
+    await ui.unmount()
+  },
+)
+
+test("when Haiku is not sure, only Claude Code's own suggestion shows", async ($, on) => {
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
 
@@ -24,39 +67,13 @@ test('replies show as buttons under the last message on desktop, and a tap sends
   })
   on('turn.complete', (_, e) => ({ text: e.answer }))
   const clock = mock.clock(on)
-  on('model.complete', () => ({ value: { isAnswered: true, text: '["commit it", "2", "run the tests"]', usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }))
-  on('prompt.suggest', () => ({ isShown: true }))
-  on('prompt.submit', (_, e) => {
-    sent.push(e.text)
-    origins.push(e.origin)
-
-    return { text: e.text }
-  })
-
-  await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
-  await $.prompt.suggest({ text: 'run the tests', origin: { kind: 'suggestion' } })
-  await clock.settle()
-
-  const ui = await $.ui.mount({ ...MESSAGE, surface: 'desktop' })
-  const first = await ui.find({ type: 'Button', key: 'reply-0' })
-  expect(first?.props.label).toBe('run the tests')
-  expect(await labels(ui)).toEqual(['run the tests', 'commit it'])
-  await ui.press({ key: 'reply-0' })
-  expect(sent).toEqual(['run the tests'])
-  // Sent as the person's own words, not framed as the plugin's message.
-  expect(origins).toEqual([{ kind: 'plugin', name: 'suggest', asUser: true }])
-  await ui.unmount()
-})
-
-test('when Haiku is not sure, only Claude Code\'s own suggestion shows', async ($, on) => {
-  on('ui.render', ($, e) => {
-    const { Text } = $.ui.resolve(e)
-
-    return <Text>engine</Text>
-  })
-  on('turn.complete', (_, e) => ({ text: e.answer }))
-  const clock = mock.clock(on)
-  on('model.complete', () => ({ value: { isAnswered: true, text: '[]', usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }))
+  on('model.complete', () => ({
+    value: {
+      isAnswered: true,
+      text: '[]',
+      usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    },
+  }))
   on('prompt.suggest', () => ({ isShown: true }))
 
   await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
@@ -80,7 +97,13 @@ const optionsShown = async ($: Parameters<TestBody>[0], on: Parameters<TestBody>
   })
   on('turn.complete', (_, e) => ({ text: e.answer }))
   const clock = mock.clock(on)
-  on('model.complete', () => ({ value: { isAnswered: true, text: OPTIONS, usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }))
+  on('model.complete', () => ({
+    value: {
+      isAnswered: true,
+      text: OPTIONS,
+      usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    },
+  }))
   on('prompt.suggest', () => ({ isShown: true }))
 
   await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
@@ -93,103 +116,153 @@ const optionsShown = async ($: Parameters<TestBody>[0], on: Parameters<TestBody>
   return shown
 }
 
-test('without Claude Code\'s own suggestion, the model fills every button', { options: { mode: 'auto' } }, async ($, on) => {
-  expect(await optionsShown($, on)).toEqual(['A tool for my daily routine', 'A game or toy', 'Something that automates a chore'])
-})
+test(
+  "without Claude Code's own suggestion, the model fills every button",
+  { options: { mode: 'auto' } },
+  async ($, on) => {
+    expect(await optionsShown($, on)).toEqual([
+      'A tool for my daily routine',
+      'A game or toy',
+      'Something that automates a chore',
+    ])
+  },
+)
 
-test('when Claude Code\'s own suggestion repeats a model reply, the buttons still fill up', { options: { mode: 'auto' } }, async ($, on) => {
-  expect(await optionsShown($, on, 'A game or toy')).toEqual(['A game or toy', 'A tool for my daily routine', 'Something that automates a chore'])
-})
+test(
+  "when Claude Code's own suggestion repeats a model reply, the buttons still fill up",
+  { options: { mode: 'auto' } },
+  async ($, on) => {
+    expect(await optionsShown($, on, 'A game or toy')).toEqual([
+      'A game or toy',
+      'A tool for my daily routine',
+      'Something that automates a chore',
+    ])
+  },
+)
 
-test('a late suggestion from Claude Code goes to the top, marked as Claude\'s', { options: { mode: 'auto' } }, async ($, on) => {
-  on('ui.render', ($, e) => {
-    const { Text } = $.ui.resolve(e)
+test(
+  "a late suggestion from Claude Code goes to the top, marked as Claude's",
+  { options: { mode: 'auto' } },
+  async ($, on) => {
+    on('ui.render', ($, e) => {
+      const { Text } = $.ui.resolve(e)
 
-    return <Text>engine</Text>
-  })
-  on('turn.complete', (_, e) => ({ text: e.answer }))
-  const clock = mock.clock(on)
-  on('model.complete', () => ({ value: { isAnswered: true, text: OPTIONS, usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }))
-  on('prompt.suggest', () => ({ isShown: true }))
+      return <Text>engine</Text>
+    })
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const clock = mock.clock(on)
+    on('model.complete', () => ({
+      value: {
+        isAnswered: true,
+        text: OPTIONS,
+        usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      },
+    }))
+    on('prompt.suggest', () => ({ isShown: true }))
 
-  await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
-  await clock.settle()
-  const before = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
-  expect(await before.find({ type: 'Text', text: '✻' })).toBeUndefined()
-  await before.unmount()
-  // Differs from a shown reply only in case and punctuation, so it is the same reply.
-  await $.prompt.suggest({ text: 'a game or toy.', origin: { kind: 'suggestion' } })
-  const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
-  expect(await labels(ui)).toEqual(['a game or toy.', 'A tool for my daily routine', 'Something that automates a chore'])
-  expect(await ui.findAll({ type: 'Text', text: '✻' })).toHaveLength(1)
-  await ui.unmount()
-})
+    await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
+    await clock.settle()
+    const before = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
+    expect(await before.find({ type: 'Text', text: '✻' })).toBeUndefined()
+    await before.unmount()
+    // Differs from a shown reply only in case and punctuation, so it is the same reply.
+    await $.prompt.suggest({ text: 'a game or toy.', origin: { kind: 'suggestion' } })
+    const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
+    expect(await labels(ui)).toEqual([
+      'a game or toy.',
+      'A tool for my daily routine',
+      'Something that automates a chore',
+    ])
+    expect(await ui.findAll({ type: 'Text', text: '✻' })).toHaveLength(1)
+    await ui.unmount()
+  },
+)
 
-test('with one reply allowed, only Claude Code\'s own suggestion shows and no model is called', { options: { maxReplies: 1 } }, async ($, on) => {
-  let calls = 0
-  on('ui.render', ($, e) => {
-    const { Text } = $.ui.resolve(e)
+test(
+  "with one reply allowed, only Claude Code's own suggestion shows and no model is called",
+  { options: { maxReplies: 1 } },
+  async ($, on) => {
+    let calls = 0
+    on('ui.render', ($, e) => {
+      const { Text } = $.ui.resolve(e)
 
-    return <Text>engine</Text>
-  })
-  on('turn.complete', (_, e) => ({ text: e.answer }))
-  const clock = mock.clock(on)
-  on('model.complete', () => {
-    calls += 1
+      return <Text>engine</Text>
+    })
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const clock = mock.clock(on)
+    on('model.complete', () => {
+      calls += 1
 
-    return { value: { isAnswered: true, text: '["commit it"]', usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }
-  })
-  on('prompt.suggest', () => ({ isShown: true }))
+      return {
+        value: {
+          isAnswered: true,
+          text: '["commit it"]',
+          usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+        },
+      }
+    })
+    on('prompt.suggest', () => ({ isShown: true }))
 
-  await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
-  await $.prompt.suggest({ text: 'run the tests', origin: { kind: 'suggestion' } })
-  await clock.settle()
+    await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
+    await $.prompt.suggest({ text: 'run the tests', origin: { kind: 'suggestion' } })
+    await clock.settle()
 
-  const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
-  expect(await labels(ui)).toEqual(['run the tests'])
-  expect(calls).toBe(0)
-  await ui.unmount()
-})
+    const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
+    expect(await labels(ui)).toEqual(['run the tests'])
+    expect(calls).toBe(0)
+    await ui.unmount()
+  },
+)
 
-test('manual mode shows only the free suggestion until /suggest, which sends nothing', { options: { mode: 'manual' } }, async ($, on) => {
-  let calls = 0
-  const sent: string[] = []
-  on('ui.render', ($, e) => {
-    const { Text } = $.ui.resolve(e)
+test(
+  'manual mode shows only the free suggestion until /suggest, which sends nothing',
+  { options: { mode: 'manual' } },
+  async ($, on) => {
+    let calls = 0
+    const sent: string[] = []
+    on('ui.render', ($, e) => {
+      const { Text } = $.ui.resolve(e)
 
-    return <Text>engine</Text>
-  })
-  on('turn.complete', (_, e) => ({ text: e.answer }))
-  const clock = mock.clock(on)
-  on('model.complete', () => {
-    calls += 1
+      return <Text>engine</Text>
+    })
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const clock = mock.clock(on)
+    on('model.complete', () => {
+      calls += 1
 
-    return { value: { isAnswered: true, text: '["commit it"]', usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }
-  })
-  on('prompt.suggest', () => ({ isShown: true }))
-  on('prompt.submit', (_, e) => {
-    sent.push(e.text)
+      return {
+        value: {
+          isAnswered: true,
+          text: '["commit it"]',
+          usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+        },
+      }
+    })
+    on('prompt.suggest', () => ({ isShown: true }))
+    on('prompt.submit', (_, e) => {
+      sent.push(e.text)
 
-    return { text: e.text }
-  })
+      return { text: e.text }
+    })
 
-  await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
-  await $.prompt.suggest({ text: 'run the tests', origin: { kind: 'suggestion' } })
-  await clock.settle()
-  const before = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
-  expect(await labels(before)).toEqual(['run the tests'])
-  expect(calls).toBe(0)
-  await before.unmount()
+    await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
+    await $.prompt.suggest({ text: 'run the tests', origin: { kind: 'suggestion' } })
+    await clock.settle()
+    const before = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
+    expect(await labels(before)).toEqual(['run the tests'])
+    expect(calls).toBe(0)
+    await before.unmount()
 
-  const ran = await $.command.run({ command: 'suggest', args: '' } as never)
-  expect(ran.text).toBeUndefined()
-  await clock.settle()
-  const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
-  expect(await labels(ui)).toEqual(['run the tests', 'commit it'])
-  expect(calls).toBe(1)
-  expect(sent).toEqual([])
-  await ui.unmount()
-})
+    const ran = await $.command.run({ command: 'suggest', args: '' } as never)
+    expect(ran.text).toBeUndefined()
+    await clock.settle()
+    const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
+    expect(await labels(ui)).toEqual(['run the tests', 'commit it'])
+    expect(calls).toBe(1)
+    expect(sent).toEqual([])
+    await ui.unmount()
+  },
+)
 
 const USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
@@ -205,7 +278,13 @@ test('smart mode asks the model only when the reply asks something', { options: 
   on('prompt.suggest', () => ({ isShown: true }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
 
-  await $.turn.complete({ answer: 'Done. All tests pass.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  await $.turn.complete({
+    answer: 'Done. All tests pass.',
+    durationMs: 1,
+    isAborted: false,
+    turnId: 't1',
+    reason: 'answer',
+  })
   await clock.settle()
   expect(calls).toBe(0)
 
@@ -288,7 +367,9 @@ const withShellChips = async (...[$, on]: Parameters<TestBody>) => {
   })
   on('turn.complete', (_, e) => ({ text: e.answer }))
   const clock = mock.clock(on)
-  on('model.complete', () => ({ value: { isAnswered: true, text: '["! git status", "commit it", "!"]', usage: USAGE } }))
+  on('model.complete', () => ({
+    value: { isAnswered: true, text: '["! git status", "commit it", "!"]', usage: USAGE },
+  }))
   on('prompt.suggest', (_, e) => {
     log.push(`suggest ${e.text}`)
 
@@ -301,7 +382,8 @@ const withShellChips = async (...[$, on]: Parameters<TestBody>) => {
   })
   on('prompt.fill', (_, e) => {
     log.push(`fill ${e.text} cursor ${e.cursor ?? '-'}`)
-    for (const d of e.decorations ?? []) log.push(`tip ${d.virtualText} at ${d.start} ${d.color} dim ${d.dimColor} italic ${d.italic}`)
+    for (const d of e.decorations ?? [])
+      log.push(`tip ${d.virtualText} at ${d.start} ${d.color} dim ${d.dimColor} italic ${d.italic}`)
 
     return { isFilled: true }
   })
@@ -312,7 +394,8 @@ const withShellChips = async (...[$, on]: Parameters<TestBody>) => {
   return { log, ui: await $.ui.mount({ ...MESSAGE, surface: 'terminal' }) }
 }
 
-const TIP = 'tip   (add ! at the beginning to run it in your shell, or press Enter to ask Claude) at 10 subtle dim true italic true'
+const TIP =
+  'tip   (add ! at the beginning to run it in your shell, or press Enter to ask Claude) at 10 subtle dim true italic true'
 
 test('a ! shell reply goes to the input without its !, the caret where the ! goes, and nothing is sent', async ($, on) => {
   const { log, ui } = await withShellChips($, on)
@@ -324,13 +407,17 @@ test('a ! shell reply goes to the input without its !, the caret where the ! goe
   await ui.unmount()
 })
 
-test('in fill mode a ! shell reply gets the tip, and a bare ! is a plain reply', { options: { click: 'fill' } }, async ($, on) => {
-  const { log, ui } = await withShellChips($, on)
-  await ui.press({ key: 'reply-0' })
-  await ui.press({ key: 'reply-2' })
-  expect(log.slice(1)).toEqual(['fill git status cursor 0', TIP, 'fill ! cursor -'])
-  await ui.unmount()
-})
+test(
+  'in fill mode a ! shell reply gets the tip, and a bare ! is a plain reply',
+  { options: { click: 'fill' } },
+  async ($, on) => {
+    const { log, ui } = await withShellChips($, on)
+    await ui.press({ key: 'reply-0' })
+    await ui.press({ key: 'reply-2' })
+    expect(log.slice(1)).toEqual(['fill git status cursor 0', TIP, 'fill ! cursor -'])
+    await ui.unmount()
+  },
+)
 
 test('✎ puts a reply in the input, and a slash reply runs as a command', async ($, on) => {
   const { log, ui } = await withChips($, on)
@@ -341,13 +428,17 @@ test('✎ puts a reply in the input, and a slash reply runs as a command', async
   await ui.unmount()
 })
 
-test('in fill mode a click puts the reply in the input and there is no ✎', { options: { click: 'fill' } }, async ($, on) => {
-  const { log, ui } = await withChips($, on)
-  expect(await ui.find({ type: 'Button', key: 'edit-0' })).toBeUndefined()
-  await ui.press({ key: 'reply-0' })
-  expect(log).toEqual(['fill run the tests'])
-  await ui.unmount()
-})
+test(
+  'in fill mode a click puts the reply in the input and there is no ✎',
+  { options: { click: 'fill' } },
+  async ($, on) => {
+    const { log, ui } = await withChips($, on)
+    expect(await ui.find({ type: 'Button', key: 'edit-0' })).toBeUndefined()
+    await ui.press({ key: 'reply-0' })
+    expect(log).toEqual(['fill run the tests'])
+    await ui.unmount()
+  },
+)
 
 test('a reload mid-call does not leave the loading line up', { options: { mode: 'auto' } }, async ($, on) => {
   on('ui.render', ($, e) => {

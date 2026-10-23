@@ -50,14 +50,19 @@ const parse = (text: string): string[] => {
     const list: unknown = JSON.parse(json)
     if (!Array.isArray(list)) return []
 
-    return list.filter((x): x is string => typeof x === 'string').map(norm).map(bareCommand).filter(sendable)
+    return list
+      .filter((x): x is string => typeof x === 'string')
+      .map(norm)
+      .map(bareCommand)
+      .filter(sendable)
   } catch {
     return []
   }
 }
 
 // "run /reload-plugins" becomes "/reload-plugins", so a click runs it.
-const bareCommand = (x: string) => /^(?:please\s+)?(?:run|type|use|try)\s+`?(\/[\w:-]+(?:\s[^`]*)?)`?$/i.exec(x)?.[1]?.trim() ?? x
+const bareCommand = (x: string) =>
+  /^(?:please\s+)?(?:run|type|use|try)\s+`?(\/[\w:-]+(?:\s[^`]*)?)`?$/i.exec(x)?.[1]?.trim() ?? x
 
 // A `!` shell command, as typed to run in shell mode; a bare `!` is none.
 const isShellCommand = (x: string) => /^!\s*\S/.test(x)
@@ -76,7 +81,11 @@ const asCommand = (text: string) => {
 }
 
 // Replies that differ only in case or punctuation are one reply.
-const sameKey = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}/]+/gu, ' ').trim()
+const sameKey = (x: string) =>
+  x
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}/]+/gu, ' ')
+    .trim()
 
 const merge = (a: string[], b: string[], max: number) => {
   const seen = new Set<string>()
@@ -107,11 +116,18 @@ async function remember($: EngineInterface, m: Message, messageChars: number) {
 
 // A reply that ends on a question or an offer is where suggested replies help most.
 const invitesReply = (answer: string) =>
-  /\?|\b(should i|shall i|want me to|would you like|let me know|which (one|option)|or should)\b/i.test(answer.slice(-600))
+  /\?|\b(should i|shall i|want me to|would you like|let me know|which (one|option)|or should)\b/i.test(
+    answer.slice(-600),
+  )
 
 // Shows the chips under the last reply: the engine's own suggestion (free), then the model's
 // unless `isFree`. A `hint` steers the model and leaves the engine's suggestion out.
-async function suggest($: EngineInterface, s: Settings, run: { generation: number }, how: { isFree?: boolean; hint?: string } = {}) {
+async function suggest(
+  $: EngineInterface,
+  s: Settings,
+  run: { generation: number },
+  how: { isFree?: boolean; hint?: string } = {},
+) {
   const l = await read($, last)
   if (!l) return false
   const mine = (run.generation += 1)
@@ -221,9 +237,7 @@ export const register: Register = (on, options) => {
     const text = bareCommand(norm(e.text))
     if (text) {
       await update($, last, l => (l ? { ...l, engine: text } : l))
-      await update($, chips, c =>
-        c ? { ...c, items: merge([text], c.items, max) } : c,
-      )
+      await update($, chips, c => (c ? { ...c, items: merge([text], c.items, max) } : c))
     }
 
     return next(e)
@@ -247,7 +261,16 @@ export const register: Register = (on, options) => {
       await $.prompt.fill({
         text: command,
         cursor: 0,
-        decorations: [{ start: command.length, end: command.length, virtualText: SHELL_TIP, color: 'subtle', dimColor: true, italic: true }],
+        decorations: [
+          {
+            start: command.length,
+            end: command.length,
+            virtualText: SHELL_TIP,
+            color: 'subtle',
+            dimColor: true,
+            italic: true,
+          },
+        ],
       })
     }
     // Sends the reply, or runs it when it is a slash command; an unknown command goes to the box instead.
