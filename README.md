@@ -15,15 +15,11 @@ When Claude finishes a reply, the answers you'd most likely give show as buttons
 
 ## Why
 
-Most of what you type to Claude between turns is short and predictable: "yes, go ahead", "run the tests",
-"option 2", `/compact`. Claude Code already shows one grey guess in the prompt, which Tab accepts.
-**Suggest** is a [mod](https://code.claude.com/docs/en/plugins/mods/overview) that turns that guess, plus a
-couple more, into buttons under Claude's last message, so answering takes one click.
+Most of what you type to Claude between turns is short and predictable: "yes, go ahead", "run the tests", "option 2", `/compact`. Claude Code already shows one grey guess in the prompt, which Tab accepts. **Suggest** is a [mod](https://code.claude.com/docs/en/plugins/mods/overview) that turns that guess, plus a couple more, into buttons under Claude's last message, so answering takes one click.
 
 ## Install
 
-Needs **Claude Code 2.1.287 or later**, the release that brought mods; tested on 2.1.309. Mods are early access:
-their API may change between releases.
+Needs **Claude Code 2.1.287 or later**, the release that brought mods; tested on 2.1.309. Mods are early access: their API may change between releases.
 
 ```text
 /plugin marketplace add dophamine/claude-suggest
@@ -42,31 +38,16 @@ If a session is already open, run `/reload-plugins` in it.
 
 </details>
 
-The buttons show in the terminal and in the Desktop app's Code tab. Under Remote Control they show in the
-terminal on your machine, not in claude.ai or the mobile app.
+The buttons show in the terminal and in the Desktop app's Code tab. Under Remote Control they show in the terminal on your machine, not in claude.ai or the mobile app.
 
 ## How it works
 
-1. **It remembers the last few messages.** It keeps the 8 most recent messages in total, your prompts and
-   Claude's final answers counted together. In a normal back-and-forth that is about 4 of each. A message longer
-   than 2,500 characters keeps only its last 2,500. Subagent replies, task notifications, scheduled prompts and
-   messages from other sessions are left out. This lives in the session's memory only and is never written to disk.
-2. **Claude finishes a turn.** The first button is Claude Code's own grey prompt suggestion, the one Tab accepts.
-   It comes from Claude Code itself and costs nothing extra.
-3. **It decides whether to ask a model for more.** In `smart` mode (the default) it does so only when the end of
-   Claude's reply asks something or offers something: a `?`, or phrases like "should I", "want me to",
-   "would you like", "let me know". In `auto` mode it asks after every reply, in `manual` mode never on its own.
-4. **A small model writes the rest.** Claude Haiku (by default, at low effort) reads the recent messages, newest
-   first, up to 6,000 characters, and returns up to 3 replies written as you would write them. Claude Code's own
-   suggestion goes first and the list is cut to 3, so when Claude Code has none, or repeats one of the model's,
-   every button is still filled. When the next reply isn't clear the model returns none, and you keep the one free
-   button. While it works, a dim "more suggestions…" line shows. It runs in the background, so the session never
-   waits for it.
-5. **The replies are cleaned up.** "Run `/compact`" becomes the bare `/compact`, so clicking it runs it. Duplicates
-   and bare numbers are dropped. If Claude Code had no grey suggestion of its own, the model's first reply becomes
-   that grey suggestion, so Tab accepts it too.
-6. **You click.** A plain reply is sent as your next prompt. A slash command is run, and one that doesn't exist is
-   put in the input instead. The dim `✎` next to a reply puts it in the input to edit before you press Enter.
+1. **It remembers the last few messages.** It keeps the 8 most recent messages in total, your prompts and Claude's final answers counted together. In a normal back-and-forth that is about 4 of each. A message longer than 2,500 characters keeps only its last 2,500. Subagent replies, task notifications, scheduled prompts and messages from other sessions are left out. This lives in the session's memory only and is never written to disk.
+2. **Claude finishes a turn.** The first button is Claude Code's own grey prompt suggestion, the one Tab accepts. It comes from Claude Code itself and costs nothing extra.
+3. **It decides whether to ask a model for more.** In `smart` mode (the default) it does so only when the end of Claude's reply asks something or offers something: a `?`, or phrases like "should I", "want me to", "would you like", "let me know". In `auto` mode it asks after every reply, in `manual` mode never on its own.
+4. **A small model writes the rest.** Claude Haiku (by default, at low effort) reads the recent messages, newest first, up to 6,000 characters, and returns up to 3 replies written as you would write them. Claude Code's own suggestion goes first and the list is cut to 3, so when Claude Code has none, or repeats one of the model's, every button is still filled. When the next reply isn't clear the model returns none, and you keep the one free button. While it works, a dim "more suggestions…" line shows. It runs in the background, so the session never waits for it.
+5. **The replies are cleaned up.** "Run `/compact`" becomes the bare `/compact`, so clicking it runs it. Duplicates and bare numbers are dropped. If Claude Code had no grey suggestion of its own, the model's first reply becomes that grey suggestion, so Tab accepts it too.
+6. **You click.** A plain reply is sent as your next prompt. A slash command is run, and one that doesn't exist is put in the input instead. The dim `✎` next to a reply puts it in the input to edit before you press Enter.
 7. **The buttons go away** as soon as you send any prompt, and a late model answer never lands on a newer reply.
 
 ## Use
@@ -78,8 +59,7 @@ terminal on your machine, not in claude.ai or the mobile app.
 
 ## Settings
 
-Change them in `/config` (rows starting with "Suggest ›"). The mod reloads with the new values, no restart needed.
-In the setup dialog after install, number fields start empty: leave them empty to keep the default.
+Change them in `/config` (rows starting with "Suggest ›"). The mod reloads with the new values, no restart needed. In the setup dialog after install, number fields start empty: leave them empty to keep the default.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -95,19 +75,13 @@ They're stored in `~/.claude/settings.json` under `pluginConfigs["suggest"].opti
 
 ## Cost
 
-Claude Code's own suggestion is free. Each extra set of replies is one small model call (Haiku at low effort by
-default) on your plan or API key. In `smart` mode that's only after replies that ask or offer something. Set
-`mode` to `manual` or `maxReplies` to `1` to make none.
+Claude Code's own suggestion is free. Each extra set of replies is one small model call (Haiku at low effort by default) on your plan or API key. In `smart` mode that's only after replies that ask or offer something. Set `mode` to `manual` or `maxReplies` to `1` to make none.
 
 ## Privacy and safety
 
-To write the extra replies, Suggest sends the recent messages (up to `contextChars`, 6,000 characters by default)
-to the model you picked, through Claude Code's own model call, on the same account as your session. Nothing goes
-anywhere else: it makes no other network requests, starts no processes, and reads or writes no files. A click sends
-only the text on the button, or runs the slash command it names.
+To write the extra replies, Suggest sends the recent messages (up to `contextChars`, 6,000 characters by default) to the model you picked, through Claude Code's own model call, on the same account as your session. Nothing goes anywhere else: it makes no other network requests, starts no processes, and reads or writes no files. A click sends only the text on the button, or runs the slash command it names.
 
-To check this yourself, run `claude plugin validate` on the folder: its `calls:` line lists everything the mod asks
-Claude Code to do.
+To check this yourself, run `claude plugin validate` on the folder: its `calls:` line lists everything the mod asks Claude Code to do.
 
 ## Develop
 
@@ -119,8 +93,7 @@ claude plugin test .
 claude --plugin-dir .
 ```
 
-Claude Code writes the type declarations to `.claude-plugin/types/` when it loads the folder. Issues and pull
-requests are welcome.
+Claude Code writes the type declarations to `.claude-plugin/types/` when it loads the folder. Issues and pull requests are welcome.
 
 ## License
 
