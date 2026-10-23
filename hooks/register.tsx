@@ -59,6 +59,12 @@ const parse = (text: string): string[] => {
 // "run /reload-plugins" becomes "/reload-plugins", so a click runs it.
 const bareCommand = (x: string) => /^(?:please\s+)?(?:run|type|use|try)\s+`?(\/[\w:-]+(?:\s[^`]*)?)`?$/i.exec(x)?.[1]?.trim() ?? x
 
+// A `!` shell command, as typed to run in shell mode; a bare `!` is none.
+const isShellCommand = (x: string) => /^!\s*\S/.test(x)
+
+// Drawn dim after a shell command put in the box without its `!`.
+const SHELL_TIP = '  (add ! at the beginning to run it in your shell, or press Enter to ask Claude)'
+
 // A bare digit says nothing as a reply.
 const sendable = (x: string) => x !== '' && !/^\d+$/.test(x)
 
@@ -134,6 +140,7 @@ async function suggest($: EngineInterface, s: Settings, run: { generation: numbe
     if (mine !== run.generation) return
     const items = r?.isAnswered ? parse(r.text).slice(0, extra) : []
     await update($, chips, c => (c ? { ...c, items: merge(c.items, items, s.max), isLoading: false } : c))
+    // A `!` shell command too: taken with Tab, unlike a fill, it switches on shell mode.
     if (!(await read($, last))?.engine && items[0]) void $.prompt.suggest({ text: items[0] })
   })
 
@@ -156,6 +163,8 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     // A reload drops a model call in flight; its chips would say "more suggestions…" forever.
     await update($, chips, c => (c?.isLoading ? { ...c, isLoading: false } : c))
+    // A status line stays pinned across a reload; this version pins none, so one left by an older is cleared.
+    $.ui.status(undefined)
     await $.command.register({
       name: 'suggest',
       description: 'Show suggested replies now (optionally steered: /suggest shorter), or set the mode',
@@ -206,14 +215,14 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  // The engine's own dim prompt suggestion becomes the first chip. Once the model's chips show,
-  // a late one only takes a free slot at the end: shown buttons never move under the cursor.
+  // The engine's own dim prompt suggestion becomes the first chip, even once the model's show:
+  // it is marked as Claude's, so its move to the top reads as such.
   on('prompt.suggest', { origin: { kind: 'suggestion' } }, async ($, e, next) => {
     const text = bareCommand(norm(e.text))
     if (text) {
       await update($, last, l => (l ? { ...l, engine: text } : l))
       await update($, chips, c =>
-        c ? { ...c, items: c.isLoading ? merge([text], c.items, max) : merge(c.items, [text], max) } : c,
+        c ? { ...c, items: merge([text], c.items, max) } : c,
       )
     }
 
@@ -224,16 +233,29 @@ export const register: Register = (on, options) => {
     const c = await read($, chips)
     if (!c || e.props.isSummary || !isLastBlock(c.answer, e.props.text)) return next(e)
     if (!c.isLoading && c.items.length === 0) return next(e)
+    // Claude Code's own suggestion gets a dim ✻ before it; every other row a blank, so the buttons stay in line.
+    const engine = (await read($, last))?.engine
+    const isEngine = (text: string) => engine !== undefined && sameKey(engine) === sameKey(text)
 
     const { Box, Button, Text } = $.ui.resolve(e)
-    // Puts the reply in the prompt box to edit, Enter to send.
+    // Puts the reply in the prompt box to edit, Enter to send. A `!` shell command goes without its `!`:
+    // a filled `!` can't switch on shell mode, and typing one in front of the command does.
     const fill = (text: string) => async () => {
-      await $.prompt.fill({ text })
+      if (!isShellCommand(text)) return void (await $.prompt.fill({ text }))
+      const command = text.slice(1).trim()
+      // The caret at the start, where the `!` goes; the tip after it, not part of the draft, gone at the next edit.
+      await $.prompt.fill({
+        text: command,
+        cursor: 0,
+        decorations: [{ start: command.length, end: command.length, virtualText: SHELL_TIP, color: 'subtle', dimColor: true, italic: true }],
+      })
     }
     // Sends the reply, or runs it when it is a slash command; an unknown command goes to the box instead.
+    // A plugin's prompt can't run in shell mode, so a `!` shell command goes to the box too, never to Claude.
     // The person picked it, so it goes as their own words, not framed as the plugin's message.
     const send = (text: string) => async () => {
       await update($, chips, () => null)
+      if (isShellCommand(text)) return fill(text)()
       const cmd = asCommand(text)
       if (!cmd) return void (await $.prompt.submit({ text, asUser: true }))
       const ran = await $.command.run(cmd).then(
@@ -254,6 +276,9 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" marginTop={1} gap={1}>
           {c.items.map((text, i) => (
             <Box key={`row-${i}`} flexDirection="row" gap={1}>
+              <Text key={`from-${i}`} dimColor>
+                {isEngine(text) ? '✻' : ' '}
+              </Text>
               <Button
                 key={`reply-${i}`}
                 label={text}

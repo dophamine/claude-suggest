@@ -101,7 +101,7 @@ test('when Claude Code\'s own suggestion repeats a model reply, the buttons stil
   expect(await optionsShown($, on, 'A game or toy')).toEqual(['A game or toy', 'A tool for my daily routine', 'Something that automates a chore'])
 })
 
-test('a late suggestion from Claude Code does not reorder the shown buttons', { options: { mode: 'auto', maxReplies: 4 } }, async ($, on) => {
+test('a late suggestion from Claude Code goes to the top, marked as Claude\'s', { options: { mode: 'auto' } }, async ($, on) => {
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
 
@@ -114,11 +114,14 @@ test('a late suggestion from Claude Code does not reorder the shown buttons', { 
 
   await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
   await clock.settle()
+  const before = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
+  expect(await before.find({ type: 'Text', text: '✻' })).toBeUndefined()
+  await before.unmount()
   // Differs from a shown reply only in case and punctuation, so it is the same reply.
   await $.prompt.suggest({ text: 'a game or toy.', origin: { kind: 'suggestion' } })
-  await $.prompt.suggest({ text: 'run the tests', origin: { kind: 'suggestion' } })
   const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
-  expect(await labels(ui)).toEqual(['A tool for my daily routine', 'A game or toy', 'Something that automates a chore', 'run the tests'])
+  expect(await labels(ui)).toEqual(['a game or toy.', 'A tool for my daily routine', 'Something that automates a chore'])
+  expect(await ui.findAll({ type: 'Text', text: '✻' })).toHaveLength(1)
   await ui.unmount()
 })
 
@@ -275,6 +278,60 @@ const withChips = async (...[$, on]: Parameters<TestBody>) => {
   return { log, ui: await $.ui.mount({ ...MESSAGE, surface: 'terminal' }) }
 }
 
+// Sets up a turn whose chips are the model's '! git status', 'commit it' and a bare '!', with no engine suggestion.
+const withShellChips = async (...[$, on]: Parameters<TestBody>) => {
+  const log: string[] = []
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  const clock = mock.clock(on)
+  on('model.complete', () => ({ value: { isAnswered: true, text: '["! git status", "commit it", "!"]', usage: USAGE } }))
+  on('prompt.suggest', (_, e) => {
+    log.push(`suggest ${e.text}`)
+
+    return { isShown: true }
+  })
+  on('prompt.submit', (_, e) => {
+    log.push(`submit ${e.text}`)
+
+    return { text: e.text }
+  })
+  on('prompt.fill', (_, e) => {
+    log.push(`fill ${e.text} cursor ${e.cursor ?? '-'}`)
+    for (const d of e.decorations ?? []) log.push(`tip ${d.virtualText} at ${d.start} ${d.color} dim ${d.dimColor} italic ${d.italic}`)
+
+    return { isFilled: true }
+  })
+
+  await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
+  await clock.settle()
+
+  return { log, ui: await $.ui.mount({ ...MESSAGE, surface: 'terminal' }) }
+}
+
+const TIP = 'tip   (add ! at the beginning to run it in your shell, or press Enter to ask Claude) at 10 subtle dim true italic true'
+
+test('a ! shell reply goes to the input without its !, the caret where the ! goes, and nothing is sent', async ($, on) => {
+  const { log, ui } = await withShellChips($, on)
+  // The grey suggestion keeps its !: taken with Tab, it switches on shell mode.
+  expect(log).toEqual(['suggest ! git status'])
+  await ui.press({ key: 'edit-0' })
+  await ui.press({ key: 'reply-0' })
+  expect(log.slice(1)).toEqual(['fill git status cursor 0', TIP, 'fill git status cursor 0', TIP])
+  await ui.unmount()
+})
+
+test('in fill mode a ! shell reply gets the tip, and a bare ! is a plain reply', { options: { click: 'fill' } }, async ($, on) => {
+  const { log, ui } = await withShellChips($, on)
+  await ui.press({ key: 'reply-0' })
+  await ui.press({ key: 'reply-2' })
+  expect(log.slice(1)).toEqual(['fill git status cursor 0', TIP, 'fill ! cursor -'])
+  await ui.unmount()
+})
+
 test('✎ puts a reply in the input, and a slash reply runs as a command', async ($, on) => {
   const { log, ui } = await withChips($, on)
   expect(await labels(ui)).toEqual(['run the tests', '/compact', 'commit it'])
@@ -302,11 +359,19 @@ test('a reload mid-call does not leave the loading line up', { options: { mode: 
   mock.clock(on)
   on('prompt.suggest', () => ({ isShown: true }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  const status: (string | undefined)[] = []
+  on('ui.status', (_, e) => {
+    status.push(e.text)
+
+    return { value: undefined }
+  })
 
   // The clock never runs, as when a reload drops the call.
   await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
   await $.prompt.suggest({ text: 'run the tests', origin: { kind: 'suggestion' } })
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  // A status line an older version pinned is cleared.
+  expect(status).toEqual([undefined])
 
   const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
   expect(await labels(ui)).toEqual(['run the tests'])
