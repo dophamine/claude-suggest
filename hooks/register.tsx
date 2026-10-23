@@ -1,185 +1,212 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Chips, Last, Message } from '../types'
+import type { Buttons, LastReply, Message } from '../types'
+import {
+  clip,
+  formatTranscript,
+  invitesReply,
+  isAnswerTail,
+  isShellCommand,
+  mergeReplies,
+  normalizeSpace,
+  parseReplies,
+  parseSlashCommand,
+  replyKey,
+  systemPrompt,
+  toBareCommand,
+} from './text'
 
-const chips = atom({ plugin: 'suggest', key: 'chips' } as const, null as Chips | null)
-// Kept in session state, not module variables, so a settings change (which reloads the mod) keeps them.
-const recent = atom({ plugin: 'suggest', key: 'recent' } as const, [] as Message[])
-const last = atom({ plugin: 'suggest', key: 'last' } as const, null as Last | null)
-
-const system = (count: number) => `You predict what a user will type next to an AI coding assistant.
-Reply with ONLY a JSON array of 0 to ${count} strings, most likely first.
-Each string is a reply the user could send as-is: written as the user, in the user's language, under 80 characters, no quotes or numbering.
-If the assistant asked a question or offered options, each reply answers it or picks one option. If there is an obvious next step, suggest approving it.
-If the assistant told the user to run a slash command, suggest the bare command itself, starting with "/" (like "/reload-plugins"), never "run /reload-plugins".
-If the next reply is not clear, return []. Fewer good replies beat more guesses.`
-
-// Long messages keep their tail: that is where a question or a next step sits.
-const clip = (text: string, max: number) => (text.length > max ? '…' + text.slice(-max) : text)
-
-// Recent messages the model reads: newest first, until the budget runs out.
-const transcript = (messages: readonly Message[], contextChars: number, messageChars: number) => {
-  const picked: string[] = []
-  let left = contextChars
-  for (const m of [...messages].reverse()) {
-    if (left <= 0) break
-    const text = clip(m.text.trim(), Math.min(messageChars, left))
-    picked.unshift(`<${m.role}>\n${text}\n</${m.role}>`)
-    left -= text.length
-  }
-
-  return picked.join('\n\n')
-}
-
-const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
-
-// The turn's answer is the reply's final text; the row drawing its last block holds its tail.
-const isLastBlock = (answer: string, text: string) => {
-  const a = norm(answer)
-  const t = norm(text)
-  if (!a || !t) return false
-
-  return a === t || a.endsWith(t) || t.endsWith(a.slice(-200))
-}
-
-const parse = (text: string): string[] => {
-  const json = text.match(/\[[\s\S]*\]/)?.[0]
-  if (!json) return []
-  try {
-    const list: unknown = JSON.parse(json)
-    if (!Array.isArray(list)) return []
-
-    return list
-      .filter((x): x is string => typeof x === 'string')
-      .map(norm)
-      .map(bareCommand)
-      .filter(sendable)
-  } catch {
-    return []
-  }
-}
-
-// "run /reload-plugins" becomes "/reload-plugins", so a click runs it.
-const bareCommand = (x: string) =>
-  /^(?:please\s+)?(?:run|type|use|try)\s+`?(\/[\w:-]+(?:\s[^`]*)?)`?$/i.exec(x)?.[1]?.trim() ?? x
-
-// A `!` shell command, as typed to run in shell mode; a bare `!` is none.
-const isShellCommand = (x: string) => /^!\s*\S/.test(x)
-
-// Drawn dim after a shell command put in the box without its `!`.
+// Messages kept for the model to read, prompts and answers together.
+const RECENT_MESSAGES = 8
+// Longest `/suggest <hint>` passed on to the model.
+const HINT_CHARS = 200
+const MODEL_TIMEOUT_MS = 20_000
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+// Prompts that don't come from the person aren't part of the conversation the model reads.
+const NON_PERSON_ORIGINS = new Set(['task-notification', 'scheduled-trigger', 'peer'])
+// Drawn dim after a `!` shell command that was put in the input without its `!`.
 const SHELL_TIP = '  (add ! at the beginning to run it in your shell, or press Enter to ask Claude)'
 
-// A bare digit says nothing as a reply.
-const sendable = (x: string) => x !== '' && !/^\d+$/.test(x)
-
-// `/name args` as `$.command.run` takes it.
-const asCommand = (text: string) => {
-  const m = /^\/([\w:-]+)\s*([\s\S]*)$/.exec(text)
-
-  return m?.[1] ? { command: m[1], args: (m[2] ?? '').trim() } : null
-}
-
-// Replies that differ only in case or punctuation are one reply.
-const sameKey = (x: string) =>
-  x
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}/]+/gu, ' ')
-    .trim()
-
-const merge = (a: string[], b: string[], max: number) => {
-  const seen = new Set<string>()
-
-  return [...a, ...b]
-    .filter(sendable)
-    .filter(x => {
-      const k = sameKey(x)
-      if (seen.has(k)) return false
-      seen.add(k)
-
-      return true
-    })
-    .slice(0, max)
-}
+// Kept in session state, not module variables, so a settings change (which reloads the mod) keeps them.
+const buttons = atom({ plugin: 'suggest', key: 'buttons' } as const, null as Buttons | null)
+const recent = atom({ plugin: 'suggest', key: 'recent' } as const, [] as Message[])
+const lastReply = atom({ plugin: 'suggest', key: 'lastReply' } as const, null as LastReply | null)
 
 type Settings = {
-  max: number
+  mode: 'auto' | 'smart' | 'manual'
+  isFillOnClick: boolean
+  maxReplies: number
   model: string
-  effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+  effort: (typeof EFFORTS)[number]
   contextChars: number
   messageChars: number
 }
 
-async function remember($: EngineInterface, m: Message, messageChars: number) {
-  await update($, recent, list => [...list, { ...m, text: clip(m.text, messageChars) }].slice(-8))
+// Bumped on every prompt and every suggestion run, so a model answer that arrives late never lands on newer buttons.
+type Generation = { current: number }
+
+// What the person asked for when buttons are shown.
+type Request = {
+  // Show only the free buttons, without calling the model.
+  isFree?: boolean
+  // Steers the model, from `/suggest <hint>`, and leaves Claude Code's own suggestion out.
+  hint?: string
 }
 
-// A reply that ends on a question or an offer is where suggested replies help most.
-const invitesReply = (answer: string) =>
-  /\?|\b(should i|shall i|want me to|would you like|let me know|which (one|option)|or should)\b/i.test(
-    answer.slice(-600),
+const readSettings = (options: Parameters<Register>[1]): Settings => ({
+  mode: options.mode === 'auto' || options.mode === 'manual' ? options.mode : 'smart',
+  isFillOnClick: options.click === 'fill',
+  maxReplies: Math.max(1, Math.floor(Number(options.maxReplies) || 3)),
+  model: String(options.model || 'haiku'),
+  effort: EFFORTS.find(effort => effort === options.effort) ?? 'low',
+  contextChars: Math.max(500, Number(options.contextChars) || 6000),
+  messageChars: Math.max(200, Number(options.messageChars) || 2500),
+})
+
+async function rememberMessage($: EngineInterface, message: Message, messageChars: number) {
+  const clipped = { ...message, text: clip(message.text, messageChars) }
+  await update($, recent, messages => [...messages, clipped].slice(-RECENT_MESSAGES))
+}
+
+// How many replies to ask the model for; 0 means no model call.
+function modelReplyCount(settings: Settings, request: Request) {
+  if (request.isFree) return 0
+  // A single button is Claude Code's own suggestion, unless a hint replaces it.
+  if (settings.maxReplies === 1 && !request.hint) return 0
+
+  // Asks for every button, not just the ones left: Claude Code's suggestion may never come or may repeat
+  // one of the model's, and the merge puts it first and cuts the list to the limit anyway.
+  return settings.maxReplies
+}
+
+async function askModel($: EngineInterface, settings: Settings, prompt: string, count: number) {
+  const result = await $.model
+    .complete({
+      model: settings.model,
+      system: systemPrompt(count),
+      prompt,
+      maxTokens: settings.effort === 'low' ? 300 : 4000,
+      effort: settings.effort,
+      timeoutMs: MODEL_TIMEOUT_MS,
+    })
+    .catch(() => null)
+
+  return result?.isAnswered ? parseReplies(result.text).slice(0, count) : []
+}
+
+async function addModelReplies(
+  $: EngineInterface,
+  settings: Settings,
+  generation: Generation,
+  runId: number,
+  prompt: string,
+  count: number,
+) {
+  const replies = await askModel($, settings, prompt, count)
+  if (runId !== generation.current) return
+  await update($, buttons, shown =>
+    shown ? { ...shown, replies: mergeReplies(shown.replies, replies, settings.maxReplies), isLoading: false } : shown,
   )
 
-// Shows the chips under the last reply: the engine's own suggestion (free), then the model's
-// unless `isFree`. A `hint` steers the model and leaves the engine's suggestion out.
-async function suggest(
-  $: EngineInterface,
-  s: Settings,
-  run: { generation: number },
-  how: { isFree?: boolean; hint?: string } = {},
-) {
-  const l = await read($, last)
-  if (!l) return false
-  const mine = (run.generation += 1)
-  const first = l.engine && !how.hint ? [l.engine] : []
-  // Asks for every slot: the engine's suggestion may never come or may repeat one, and the merge puts it first and cuts to max.
-  // One slot is the engine's alone, so it needs no model call.
-  const extra = how.isFree || (s.max === 1 && !how.hint) ? 0 : s.max
-  await update($, chips, () => ({ answer: l.answer, items: first, isLoading: extra > 0 }))
-  if (extra === 0) return true
-  const context =
-    transcript(await read($, recent), s.contextChars, s.messageChars) +
-    (how.hint ? `\n\nThe user asked for replies that are: ${how.hint.slice(0, 200)}` : '')
+  // Without a suggestion from Claude Code, the model's first reply becomes the dim one in the input.
+  // Taken with Tab, unlike a fill, a `!` shell command there switches on shell mode.
+  const engineSuggestion = (await read($, lastReply))?.engineSuggestion
+  if (!engineSuggestion && replies[0]) void $.prompt.suggest({ text: replies[0] })
+}
 
-  // Off this dispatch, so the caller ends at once and the model call outlives the hook.
-  $.clock.after(0, async () => {
-    const r = await $.model
-      .complete({
-        model: s.model,
-        system: system(extra),
-        prompt: context,
-        maxTokens: s.effort === 'low' ? 300 : 4000,
-        effort: s.effort,
-        timeoutMs: 20000,
-      })
-      .catch(() => null)
-    if (mine !== run.generation) return
-    const items = r?.isAnswered ? parse(r.text).slice(0, extra) : []
-    await update($, chips, c => (c ? { ...c, items: merge(c.items, items, s.max), isLoading: false } : c))
-    // A `!` shell command too: taken with Tab, unlike a fill, it switches on shell mode.
-    if (!(await read($, last))?.engine && items[0]) void $.prompt.suggest({ text: items[0] })
-  })
+// Shows buttons under the last reply: Claude Code's own suggestion right away, then the model's replies
+// once they come. Returns false when there is no reply to suggest for yet.
+async function showButtons($: EngineInterface, settings: Settings, generation: Generation, request: Request = {}) {
+  const reply = await read($, lastReply)
+  if (!reply) return false
+
+  generation.current += 1
+  const runId = generation.current
+  const free = reply.engineSuggestion && !request.hint ? [reply.engineSuggestion] : []
+  const count = modelReplyCount(settings, request)
+  await update($, buttons, () => ({ answer: reply.answer, replies: free, isLoading: count > 0 }))
+  if (count === 0) return true
+
+  const transcript = formatTranscript(await read($, recent), settings.contextChars, settings.messageChars)
+  const hint = request.hint ? `\n\nThe user asked for replies that are: ${request.hint.slice(0, HINT_CHARS)}` : ''
+  // Runs after this dispatch, so the hook returns at once and the model call can outlive it.
+  $.clock.after(0, () => addModelReplies($, settings, generation, runId, transcript + hint, count))
 
   return true
 }
 
-export const register: Register = (on, options) => {
-  const max = Math.max(1, Math.floor(Number(options.maxReplies) || 3))
-  const mode = options.mode === 'manual' || options.mode === 'auto' ? options.mode : 'smart'
-  const model = String(options.model || 'haiku')
-  const effort = (['low', 'medium', 'high', 'xhigh', 'max'] as const).find(x => x === options.effort) ?? 'low'
-  const contextChars = Math.max(500, Number(options.contextChars) || 6000)
-  const messageChars = Math.max(200, Number(options.messageChars) || 2500)
-  const isFillOnClick = options.click === 'fill'
+// Puts a reply in the input to edit; Enter sends it.
+async function fillInput($: EngineInterface, text: string) {
+  if (!isShellCommand(text)) {
+    await $.prompt.fill({ text })
+    return
+  }
 
-  const settings: Settings = { max, model, effort, contextChars, messageChars }
-  // Bumped per prompt and per run so a late model answer never lands on newer chips.
-  const run = { generation: 0 }
+  // A filled `!` can't switch on shell mode, but typing one does. So the command goes in without its `!`,
+  // with the caret at the start where the `!` goes, and a dim tip after it. The tip is not part of the draft
+  // and goes away at the next edit.
+  const command = text.slice(1).trim()
+  await $.prompt.fill({
+    text: command,
+    cursor: 0,
+    decorations: [
+      {
+        start: command.length,
+        end: command.length,
+        virtualText: SHELL_TIP,
+        color: 'subtle',
+        dimColor: true,
+        italic: true,
+      },
+    ],
+  })
+}
+
+// Running a command sends no prompt, so the input keeps showing Claude Code's dim suggestion. An edit clears it,
+// but only an empty input is touched: a draft the person typed stays.
+async function clearInputSuggestion($: EngineInterface) {
+  if ((await $.prompt.read()).text !== '') return
+  await $.prompt.fill({ text: ' ' })
+  await $.prompt.fill({ text: '' })
+}
+
+// Sends a reply as the person's own words, not as the plugin's message, or runs it when it is a slash command.
+async function sendReply($: EngineInterface, text: string) {
+  await update($, buttons, () => null)
+
+  // A plugin's prompt can't run in shell mode, so a `!` shell command goes to the input, never to Claude.
+  if (isShellCommand(text)) {
+    await fillInput($, text)
+    return
+  }
+
+  const command = parseSlashCommand(text)
+  if (!command) {
+    await $.prompt.submit({ text, asUser: true })
+    return
+  }
+
+  const ran = await $.command.run(command).then(
+    () => true,
+    () => false,
+  )
+  if (ran) {
+    await clearInputSuggestion($)
+  } else {
+    // An unknown command goes to the input to edit.
+    await $.prompt.fill({ text })
+  }
+}
+
+export const register: Register = (on, options) => {
+  const settings = readSettings(options)
+  const generation: Generation = { current: 0 }
 
   on('session.start', async ($, e, next) => {
-    // A reload drops a model call in flight; its chips would say "more suggestions…" forever.
-    await update($, chips, c => (c?.isLoading ? { ...c, isLoading: false } : c))
-    // A status line stays pinned across a reload; this version pins none, so one left by an older is cleared.
+    // A reload drops a model call in flight, which would leave "more suggestions…" up forever.
+    await update($, buttons, shown => (shown?.isLoading ? { ...shown, isLoading: false } : shown))
+    // A status line stays pinned across a reload. This version pins none, so clear one an older version left.
     $.ui.status(undefined)
     await $.command.register({
       name: 'suggest',
@@ -192,28 +219,30 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'suggest' }, async ($, e) => {
     const arg = e.args.trim()
-    const word = arg.toLowerCase()
-    if (word === 'auto' || word === 'smart' || word === 'manual') {
-      const { deny } = await $.config.set({ key: 'suggest.mode', value: word })
+    const mode = arg.toLowerCase()
+    if (mode === 'auto' || mode === 'smart' || mode === 'manual') {
+      const { deny } = await $.config.set({ key: 'suggest.mode', value: mode })
 
-      return { text: deny ? `Couldn't switch mode: ${deny}` : `Suggest: ${word} mode` }
+      return { text: deny ? `Couldn't switch mode: ${deny}` : `Suggest: ${mode} mode` }
     }
 
     // Nothing goes to the session: the buttons show under the last reply.
-    return (await suggest($, settings, run, { hint: arg || undefined })) ? {} : { text: 'No reply to suggest for yet.' }
+    const isShown = await showButtons($, settings, generation, { hint: arg || undefined })
+
+    return isShown ? {} : { text: 'No reply to suggest for yet.' }
   })
 
   on('prompt.submit', async ($, e, next) => {
-    // The command reads the last reply, so its own prompt must not clear it.
+    // `/suggest` reads the last reply, so its own prompt must not clear it.
     if (/^\/suggest\b/.test(e.text.trim())) return next(e)
-    run.generation += 1
-    const kind = e.origin.kind
-    if (kind !== 'task-notification' && kind !== 'scheduled-trigger' && kind !== 'peer' && e.text.trim()) {
-      await remember($, { role: 'user', text: e.text }, messageChars).catch(() => undefined)
+
+    generation.current += 1
+    // Errors are swallowed: the buttons must never hold up the prompt.
+    if (!NON_PERSON_ORIGINS.has(e.origin.kind) && e.text.trim()) {
+      await rememberMessage($, { role: 'user', text: e.text }, settings.messageChars).catch(() => undefined)
     }
-    // Never hold up the prompt over the chips.
-    await update($, chips, () => null).catch(() => undefined)
-    await update($, last, () => null).catch(() => undefined)
+    await update($, buttons, () => null).catch(() => undefined)
+    await update($, lastReply, () => null).catch(() => undefined)
 
     return next(e)
   })
@@ -222,96 +251,64 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     if (e.agentId !== undefined || e.reason !== 'answer' || !e.answer.trim()) return result
 
-    await remember($, { role: 'assistant', text: e.answer }, messageChars)
-    await update($, last, () => ({ answer: e.answer }))
-    // Auto always asks the model; smart only when the reply invites one; manual never. All show the free one.
-    const isFree = mode === 'manual' || (mode === 'smart' && !invitesReply(e.answer))
-    await suggest($, settings, run, { isFree })
+    await rememberMessage($, { role: 'assistant', text: e.answer }, settings.messageChars)
+    await update($, lastReply, () => ({ answer: e.answer }))
+    // Every mode shows the free suggestion. Auto also asks the model every time, smart only when the answer
+    // invites a reply, and manual never.
+    const isFree = settings.mode === 'manual' || (settings.mode === 'smart' && !invitesReply(e.answer))
+    await showButtons($, settings, generation, { isFree })
 
     return result
   })
 
-  // The engine's own dim prompt suggestion becomes the first chip, even once the model's show:
-  // it is marked as Claude's, so its move to the top reads as such.
+  // Claude Code's own dim suggestion in the input becomes the first button, even after the model's replies show.
+  // It is marked as Claude's, so it reads as such when it moves to the top.
   on('prompt.suggest', { origin: { kind: 'suggestion' } }, async ($, e, next) => {
-    const text = bareCommand(norm(e.text))
+    const text = toBareCommand(normalizeSpace(e.text))
     if (text) {
-      await update($, last, l => (l ? { ...l, engine: text } : l))
-      await update($, chips, c => (c ? { ...c, items: merge([text], c.items, max) } : c))
+      await update($, lastReply, reply => (reply ? { ...reply, engineSuggestion: text } : reply))
+      await update($, buttons, shown =>
+        shown ? { ...shown, replies: mergeReplies([text], shown.replies, settings.maxReplies) } : shown,
+      )
     }
 
     return next(e)
   })
 
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
-    const c = await read($, chips)
-    if (!c || e.props.isSummary || !isLastBlock(c.answer, e.props.text)) return next(e)
-    if (!c.isLoading && c.items.length === 0) return next(e)
-    // Claude Code's own suggestion gets a dim ✻ before it; every other row a blank, so the buttons stay in line.
-    const engine = (await read($, last))?.engine
-    const isEngine = (text: string) => engine !== undefined && sameKey(engine) === sameKey(text)
+    const shown = await read($, buttons)
+    if (!shown || e.props.isSummary || !isAnswerTail(shown.answer, e.props.text)) return next(e)
+    if (!shown.isLoading && shown.replies.length === 0) return next(e)
+
+    const engineSuggestion = (await read($, lastReply))?.engineSuggestion
+    const isEngineSuggestion = (text: string) =>
+      engineSuggestion !== undefined && replyKey(engineSuggestion) === replyKey(text)
+    const onPress = (text: string) => () => (settings.isFillOnClick ? fillInput($, text) : sendReply($, text))
 
     const { Box, Button, Text } = $.ui.resolve(e)
-    // Puts the reply in the prompt box to edit, Enter to send. A `!` shell command goes without its `!`:
-    // a filled `!` can't switch on shell mode, and typing one in front of the command does.
-    const fill = (text: string) => async () => {
-      if (!isShellCommand(text)) return void (await $.prompt.fill({ text }))
-      const command = text.slice(1).trim()
-      // The caret at the start, where the `!` goes; the tip after it, not part of the draft, gone at the next edit.
-      await $.prompt.fill({
-        text: command,
-        cursor: 0,
-        decorations: [
-          {
-            start: command.length,
-            end: command.length,
-            virtualText: SHELL_TIP,
-            color: 'subtle',
-            dimColor: true,
-            italic: true,
-          },
-        ],
-      })
-    }
-    // Sends the reply, or runs it when it is a slash command; an unknown command goes to the box instead.
-    // A plugin's prompt can't run in shell mode, so a `!` shell command goes to the box too, never to Claude.
-    // The person picked it, so it goes as their own words, not framed as the plugin's message.
-    const send = (text: string) => async () => {
-      await update($, chips, () => null)
-      if (isShellCommand(text)) return fill(text)()
-      const cmd = asCommand(text)
-      if (!cmd) return void (await $.prompt.submit({ text, asUser: true }))
-      const ran = await $.command.run(cmd).then(
-        () => true,
-        () => false,
-      )
-      if (!ran) return void (await $.prompt.fill({ text }))
-      // A command sends no prompt, so the box keeps the dim suggestion; an edit clears it.
-      // Only an empty box: a draft the person typed stays.
-      if ((await $.prompt.read()).text !== '') return
-      await $.prompt.fill({ text: ' ' })
-      await $.prompt.fill({ text: '' })
-    }
 
     return (
       <Box flexDirection="column">
         {await next(e)}
         <Box flexDirection="column" marginTop={1} gap={1}>
-          {c.items.map((text, i) => (
+          {shown.replies.map((text, i) => (
             <Box key={`row-${i}`} flexDirection="row" gap={1}>
-              <Text key={`from-${i}`} dimColor>
-                {isEngine(text) ? '✻' : ' '}
-              </Text>
+              {/* Claude Code's own suggestion gets a dim ✻; every other row a blank, so the buttons line up. */}
+              <Text dimColor>{isEngineSuggestion(text) ? '✻' : ' '}</Text>
               <Button
                 key={`reply-${i}`}
                 label={text}
                 variant={i === 0 ? 'primary' : 'secondary'}
-                onPress={isFillOnClick ? fill(text) : send(text)}
+                onPress={onPress(text)}
               />
-              {isFillOnClick ? null : <Button key={`edit-${i}`} label="✎" plain dimColor onPress={fill(text)} />}
+              {settings.isFillOnClick ? null : (
+                <Button key={`edit-${i}`} label="✎" plain dimColor onPress={() => fillInput($, text)} />
+              )}
             </Box>
           ))}
-          {c.isLoading ? <Text dimColor>{c.items.length ? 'more suggestions…' : 'suggesting replies…'}</Text> : null}
+          {shown.isLoading ? (
+            <Text dimColor>{shown.replies.length ? 'more suggestions…' : 'suggesting replies…'}</Text>
+          ) : null}
         </Box>
       </Box>
     )

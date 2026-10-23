@@ -1,17 +1,19 @@
-export type Chips = {
-  // The final text of the turn the chips belong to, to find its message row.
+// The buttons under the last reply.
+export type Buttons = {
+  // The final text of the turn the buttons belong to, used to find the message block to draw them under.
   answer: string
-  items: string[]
+  replies: string[]
+  // The model has been asked for more replies and hasn't answered yet.
   isLoading: boolean
 }
 
 export type Message = { role: 'user' | 'assistant'; text: string }
 
-// The last main-loop reply, and the engine's own suggestion for it once it comes.
-export type Last = { answer: string; engine?: string }
+// The last main-loop reply, plus Claude Code's own suggestion for it once that arrives.
+export type LastReply = { answer: string; engineSuggestion?: string }
 
 declare module 'claude-code' {
   interface PluginState {
-    suggest: { chips: Chips | null; recent: Message[]; last: Last | null }
+    suggest: { buttons: Buttons | null; recent: Message[]; lastReply: LastReply | null }
   }
 }
