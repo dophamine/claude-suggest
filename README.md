@@ -47,9 +47,10 @@ terminal on your machine, not in claude.ai or the mobile app.
 
 ## How it works
 
-1. **It remembers the last few messages.** The last 8 of your prompts and Claude's final answers, each cut to
-   its last 2,500 characters. Subagent replies, task notifications and scheduled prompts are
-   left out. This lives in the session's memory only and is never written to disk.
+1. **It remembers the last few messages.** It keeps the 8 most recent messages in total, your prompts and
+   Claude's final answers counted together. In a normal back-and-forth that is about 4 of each. A message longer
+   than 2,500 characters keeps only its last 2,500. Subagent replies, task notifications, scheduled prompts and
+   messages from other sessions are left out. This lives in the session's memory only and is never written to disk.
 2. **Claude finishes a turn.** The first button is Claude Code's own grey prompt suggestion, the one Tab accepts.
    It comes from Claude Code itself and costs nothing extra.
 3. **It decides whether to ask a model for more.** In `smart` mode (the default) it does so only when the end of
@@ -123,4 +124,6 @@ requests are welcome.
 
 ## License
 
-[MIT](LICENSE) © Alex Pakhaliuk
+[MIT](LICENSE). Use it freely, adapt it to your workflow.
+
+Star this repo if it helps.
