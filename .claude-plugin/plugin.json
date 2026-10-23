@@ -1,9 +1,9 @@
 {
   "name": "suggest",
-  "version": "0.1.0",
-  "description": "Clickable suggested replies under Claude's last message, in the terminal",
+  "version": "1.0.0",
+  "description": "Clickable suggested replies under Claude's last message",
   "author": {
-    "name": "Aleksey Pakhaliuk"
+    "name": "Alex Pakhaliuk"
   },
   "homepage": "https://github.com/dophamine/claude-suggest",
   "repository": "https://github.com/dophamine/claude-suggest",

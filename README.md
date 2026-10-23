@@ -1,40 +1,83 @@
-# Suggest
+<div align="center">
 
-A Claude Code mod. When Claude ends a turn, up to three suggested replies show as
-buttons under its last message. Tap or click one and it is sent as your next prompt.
-It works in the terminal. The Claude mobile app (Remote Control) doesn't draw plugin buttons, so they don't show there.
+# Claude Suggest
+
+**Clickable suggested replies for Claude Code.**<br>
+When Claude finishes a reply, the answers you'd most likely give show as buttons under it. Click one to send it.
+
+[![Version](https://img.shields.io/badge/version-1.0.0-61afef.svg)](https://github.com/dophamine/claude-suggest)
+[![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-c678dd.svg)](https://code.claude.com/docs/en/plugins/mods/overview)
+[![License: MIT](https://img.shields.io/badge/license-MIT-98c379.svg)](LICENSE)
+
+<!-- Demo: add assets/demo.gif and uncomment
+<img src="assets/demo.gif" alt="Suggested replies as buttons under Claude's last message" width="720">
+-->
+
+</div>
+
+## Why
+
+Most of what you type to Claude between turns is short and predictable: "yes, go ahead", "run the tests",
+"option 2", `/compact`. Claude Code already shows one grey guess in the prompt, which Tab accepts.
+**Suggest** is a [mod](https://code.claude.com/docs/en/plugins/mods/overview) that turns that guess, plus a
+couple more, into buttons under Claude's last message, so answering takes one click.
 
 ## Install
 
-In Claude Code, run:
+Needs **Claude Code 2.1.287 or later**, the release that brought mods; tested on 2.1.309. Mods are early access:
+their API may change between releases.
 
-```
-/plugin install suggest --marketplace dophamine/claude-suggest
-```
-
-Or add the marketplace first, then install from it:
-
-```
+```text
 /plugin marketplace add dophamine/claude-suggest
-/plugin install suggest@suggest
+/plugin install suggest@claude-suggest
 ```
 
-It needs a Claude Code version with plugin hook modules (2.1.308 or later).
+<details>
+<summary>From a terminal instead</summary>
 
-Where the suggestions come from:
-- Claude Code's own grey prompt suggestion (the one Tab accepts), shown first. It costs nothing extra.
-- Up to 2 more from Claude Haiku, which reads only the last few messages (at most ~6,000 characters,
-  long messages cut to their last 2,500). When Haiku isn't sure what you'd say next it adds none,
-  and you get just the one suggestion.
+```sh
+claude plugin marketplace add dophamine/claude-suggest
+claude plugin install suggest@claude-suggest
+```
 
-The buttons clear as soon as you send any prompt.
+If a session is already open, run `/reload-plugins` in it.
 
-Clicking a reply sends it. If it's a slash command (`/compact`), it runs instead. Click the dim ✎ next to a reply
-to put it in the input, where you can edit it and press Enter.
+</details>
+
+The buttons show in the terminal and in the Desktop app's Code tab. Under Remote Control they show in the
+terminal on your machine, not in claude.ai or the mobile app.
+
+## How it works
+
+1. **It remembers the last few messages.** The last 8 of your prompts and Claude's final answers, each cut to
+   its last 2,500 characters. Subagent replies, task notifications and scheduled prompts are
+   left out. This lives in the session's memory only and is never written to disk.
+2. **Claude finishes a turn.** The first button is Claude Code's own grey prompt suggestion, the one Tab accepts.
+   It comes from Claude Code itself and costs nothing extra.
+3. **It decides whether to ask a model for more.** In `smart` mode (the default) it does so only when the end of
+   Claude's reply asks something or offers something: a `?`, or phrases like "should I", "want me to",
+   "would you like", "let me know". In `auto` mode it asks after every reply, in `manual` mode never on its own.
+4. **A small model writes the rest.** Claude Haiku (by default, at low effort) reads the recent messages, newest
+   first, up to 6,000 characters, and returns up to 2 more replies written as you would write them. When the next
+   reply isn't clear it returns none, and you keep the one free button. While it works, a dim "more suggestions…"
+   line shows. It runs in the background, so the session never waits for it.
+5. **The replies are cleaned up.** "Run `/compact`" becomes the bare `/compact`, so clicking it runs it. Duplicates
+   and bare numbers are dropped. If Claude Code had no grey suggestion of its own, the model's first reply becomes
+   that grey suggestion, so Tab accepts it too.
+6. **You click.** A plain reply is sent as your next prompt. A slash command is run, and one that doesn't exist is
+   put in the input instead. The dim `✎` next to a reply puts it in the input to edit before you press Enter.
+7. **The buttons go away** as soon as you send any prompt, and a late model answer never lands on a newer reply.
+
+## Use
+
+- Click a reply to send it, or `✎` to edit it first.
+- `/suggest` shows buttons under Claude's last reply now, in any mode. Nothing is sent to the session.
+- `/suggest <hint>` steers them, like `/suggest shorter` or `/suggest about testing`. All buttons then come from the model.
+- `/suggest auto`, `/suggest smart` or `/suggest manual` switches the mode.
 
 ## Settings
 
-Change them in `/config` (rows starting with "Suggest ›"), and the mod reloads with the new values. No restart needed.
+Change them in `/config` (rows starting with "Suggest ›"). The mod reloads with the new values, no restart needed.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -46,30 +89,37 @@ Change them in `/config` (rows starting with "Suggest ›"), and the mod reloads
 | `contextChars` | 6000 | How much recent conversation the model reads |
 | `messageChars` | 2500 | Longer messages keep only their last part |
 
-They're stored in `settings.json` under `pluginConfigs["suggest"].options`.
-
-## /suggest
-
-- `/suggest` shows the buttons under Claude's last reply now. Nothing is sent to the session.
-- `/suggest <hint>` steers them, like `/suggest shorter` or `/suggest about testing`. All buttons then come from the model.
-- `/suggest auto`, `/suggest smart` or `/suggest manual` switches the mode.
+They're stored in `~/.claude/settings.json` under `pluginConfigs["suggest"].options`.
 
 ## Cost
 
-Claude Code's own suggestion is free. Each extra reply set is one small model call (Haiku at low
-effort by default) on your account. Set `mode` to `manual` or `maxReplies` to `1` to make none.
+Claude Code's own suggestion is free. Each extra set of replies is one small model call (Haiku at low effort by
+default) on your plan or API key. In `smart` mode that's only after replies that ask or offer something. Set
+`mode` to `manual` or `maxReplies` to `1` to make none.
 
-## Development
+## Privacy and safety
 
-```
+To write the extra replies, Suggest sends the recent messages (up to `contextChars`, 6,000 characters by default)
+to the model you picked, through Claude Code's own model call, on the same account as your session. Nothing goes
+anywhere else: it makes no other network requests, starts no processes, and reads or writes no files. A click sends
+only the text on the button, or runs the slash command it names.
+
+To check this yourself, run `claude plugin validate` on the folder: its `calls:` line lists everything the mod asks
+Claude Code to do.
+
+## Develop
+
+```sh
 git clone https://github.com/dophamine/claude-suggest
-claude --plugin-dir ./claude-suggest   # load it from the folder
-claude plugin test ./claude-suggest    # run the tests
-claude plugin validate ./claude-suggest
+cd claude-suggest
+claude plugin validate .
+claude plugin test .
+claude --plugin-dir .
 ```
 
-Claude Code writes the type declarations to `.claude-plugin/types/` when it loads the folder.
+Claude Code writes the type declarations to `.claude-plugin/types/` when it loads the folder. Issues and pull
+requests are welcome.
 
 ## License
 
-MIT
+[MIT](LICENSE) © Alex Pakhaliuk

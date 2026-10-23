@@ -1,14 +1,14 @@
 {
-  "name": "suggest",
-  "description": "Clickable suggested replies under Claude's last message, in the terminal",
+  "name": "claude-suggest",
+  "description": "Clickable suggested replies under Claude's last message",
   "owner": {
-    "name": "Aleksey Pakhaliuk"
+    "name": "Alex Pakhaliuk"
   },
   "plugins": [
     {
       "name": "suggest",
       "source": "./",
-      "description": "Clickable suggested replies under Claude's last message, in the terminal"
+      "description": "Clickable suggested replies under Claude's last message"
     }
   ]
 }

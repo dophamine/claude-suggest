@@ -1,3 +1,6 @@
+# Type declarations Claude Code writes when it loads the folder
+.claude-plugin/types/
+
 # Compiled output; the mod loads hooks/register.tsx directly
 hooks/*.js
 node_modules/
