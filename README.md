@@ -9,9 +9,7 @@ When Claude finishes a reply, the answers you'd most likely give show as buttons
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-c678dd.svg)](https://code.claude.com/docs/en/plugins/mods/overview)
 [![License: MIT](https://img.shields.io/badge/license-MIT-98c379.svg)](LICENSE)
 
-<!-- Demo: add assets/demo.gif and uncomment
-<img src="assets/demo.gif" alt="Suggested replies as buttons under Claude's last message" width="720">
--->
+<img src="assets/demo.gif" alt="Suggested replies as buttons under Claude's last message" width="921">
 
 </div>
 
