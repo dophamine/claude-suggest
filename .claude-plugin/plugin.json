@@ -5,8 +5,8 @@
   "author": {
     "name": "Aleksey Pakhaliuk"
   },
-  "homepage": "https://github.com/dophamine/suggest",
-  "repository": "https://github.com/dophamine/suggest",
+  "homepage": "https://github.com/dophamine/claude-suggest",
+  "repository": "https://github.com/dophamine/claude-suggest",
   "license": "MIT",
   "keywords": [
     "suggestions",

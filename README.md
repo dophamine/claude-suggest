@@ -1,4 +1,4 @@
-# suggest
+# Suggest
 
 A Claude Code mod. When Claude ends a turn, up to three suggested replies show as
 buttons under its last message. Tap or click one and it is sent as your next prompt.
@@ -9,13 +9,13 @@ It works in the terminal. The Claude mobile app (Remote Control) doesn't draw pl
 In Claude Code, run:
 
 ```
-/plugin install suggest --marketplace dophamine/suggest
+/plugin install suggest --marketplace dophamine/claude-suggest
 ```
 
 Or add the marketplace first, then install from it:
 
 ```
-/plugin marketplace add dophamine/suggest
+/plugin marketplace add dophamine/claude-suggest
 /plugin install suggest@suggest
 ```
 
@@ -62,10 +62,10 @@ effort by default) on your account. Set `mode` to `manual` or `maxReplies` to `1
 ## Development
 
 ```
-git clone https://github.com/dophamine/suggest
-claude --plugin-dir ./suggest   # load it from the folder
-claude plugin test ./suggest    # run the tests
-claude plugin validate ./suggest
+git clone https://github.com/dophamine/claude-suggest
+claude --plugin-dir ./claude-suggest   # load it from the folder
+claude plugin test ./claude-suggest    # run the tests
+claude plugin validate ./claude-suggest
 ```
 
 Claude Code writes the type declarations to `.claude-plugin/types/` when it loads the folder.
