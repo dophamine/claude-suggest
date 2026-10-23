@@ -5,11 +5,11 @@
 **Clickable suggested replies for Claude Code.**<br>
 When Claude finishes a reply, the answers you'd most likely give show as buttons under it. Click one to send it.
 
-[![Version](https://img.shields.io/badge/version-1.0.5-61afef.svg)](https://github.com/dophamine/claude-suggest)
+[![Version](https://img.shields.io/badge/version-1.0.6-61afef.svg)](https://github.com/dophamine/claude-suggest)
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-c678dd.svg)](https://code.claude.com/docs/en/plugins/mods/overview)
 [![License: MIT](https://img.shields.io/badge/license-MIT-98c379.svg)](LICENSE)
 
-<img src="assets/demo.gif" alt="Suggested replies as buttons under Claude's last message" width="921">
+<img src="assets/demo.gif" alt="Suggested replies as buttons under Claude's last message" width="630">
 
 </div>
 
