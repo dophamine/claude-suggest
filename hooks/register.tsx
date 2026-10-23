@@ -107,8 +107,9 @@ async function suggest($: EngineInterface, s: Settings, run: { generation: numbe
   if (!l) return false
   const mine = (run.generation += 1)
   const first = l.engine && !how.hint ? [l.engine] : []
-  // The engine's suggestion takes a slot even when it comes after this.
-  const extra = how.isFree ? 0 : how.hint ? s.max : s.max - 1
+  // Asks for every slot: the engine's suggestion may never come or may repeat one, and the merge puts it first and cuts to max.
+  // One slot is the engine's alone, so it needs no model call.
+  const extra = how.isFree || (s.max === 1 && !how.hint) ? 0 : s.max
   await update($, chips, () => ({ answer: l.answer, items: first, isLoading: extra > 0 }))
   if (extra === 0) return true
   const context =

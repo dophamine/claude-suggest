@@ -5,7 +5,7 @@
 **Clickable suggested replies for Claude Code.**<br>
 When Claude finishes a reply, the answers you'd most likely give show as buttons under it. Click one to send it.
 
-[![Version](https://img.shields.io/badge/version-1.0.2-61afef.svg)](https://github.com/dophamine/claude-suggest)
+[![Version](https://img.shields.io/badge/version-1.0.3-61afef.svg)](https://github.com/dophamine/claude-suggest)
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-c678dd.svg)](https://code.claude.com/docs/en/plugins/mods/overview)
 [![License: MIT](https://img.shields.io/badge/license-MIT-98c379.svg)](LICENSE)
 
@@ -58,9 +58,11 @@ terminal on your machine, not in claude.ai or the mobile app.
    Claude's reply asks something or offers something: a `?`, or phrases like "should I", "want me to",
    "would you like", "let me know". In `auto` mode it asks after every reply, in `manual` mode never on its own.
 4. **A small model writes the rest.** Claude Haiku (by default, at low effort) reads the recent messages, newest
-   first, up to 6,000 characters, and returns up to 2 more replies written as you would write them. When the next
-   reply isn't clear it returns none, and you keep the one free button. While it works, a dim "more suggestions…"
-   line shows. It runs in the background, so the session never waits for it.
+   first, up to 6,000 characters, and returns up to 3 replies written as you would write them. Claude Code's own
+   suggestion goes first and the list is cut to 3, so when Claude Code has none, or repeats one of the model's,
+   every button is still filled. When the next reply isn't clear the model returns none, and you keep the one free
+   button. While it works, a dim "more suggestions…" line shows. It runs in the background, so the session never
+   waits for it.
 5. **The replies are cleaned up.** "Run `/compact`" becomes the bare `/compact`, so clicking it runs it. Duplicates
    and bare numbers are dropped. If Claude Code had no grey suggestion of its own, the model's first reply becomes
    that grey suggestion, so Tab accepts it too.

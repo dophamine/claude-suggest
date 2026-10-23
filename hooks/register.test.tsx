@@ -69,6 +69,38 @@ test('when Haiku is not sure, only Claude Code\'s own suggestion shows', async (
   await ui.unmount()
 })
 
+const OPTIONS = '["A tool for my daily routine", "A game or toy", "Something that automates a chore"]'
+
+// Claude Code's own suggestion, if any, then the model's replies, up to three in all.
+const optionsShown = async ($: Parameters<TestBody>[0], on: Parameters<TestBody>[1], engine?: string) => {
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  const clock = mock.clock(on)
+  on('model.complete', () => ({ value: { isAnswered: true, text: OPTIONS, usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }))
+  on('prompt.suggest', () => ({ isShown: true }))
+
+  await $.turn.complete({ answer: ANSWER, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
+  if (engine) await $.prompt.suggest({ text: engine, origin: { kind: 'suggestion' } })
+  await clock.settle()
+  const ui = await $.ui.mount({ ...MESSAGE, surface: 'terminal' })
+  const shown = await labels(ui)
+  await ui.unmount()
+
+  return shown
+}
+
+test('without Claude Code\'s own suggestion, the model fills every button', { options: { mode: 'auto' } }, async ($, on) => {
+  expect(await optionsShown($, on)).toEqual(['A tool for my daily routine', 'A game or toy', 'Something that automates a chore'])
+})
+
+test('when Claude Code\'s own suggestion repeats a model reply, the buttons still fill up', { options: { mode: 'auto' } }, async ($, on) => {
+  expect(await optionsShown($, on, 'A game or toy')).toEqual(['A game or toy', 'A tool for my daily routine', 'Something that automates a chore'])
+})
+
 test('with one reply allowed, only Claude Code\'s own suggestion shows and no model is called', { options: { maxReplies: 1 } }, async ($, on) => {
   let calls = 0
   on('ui.render', ($, e) => {
