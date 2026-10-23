@@ -5,7 +5,7 @@
 **Clickable suggested replies for Claude Code.**<br>
 When Claude finishes a reply, the answers you'd most likely give show as buttons under it. Click one to send it.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-61afef.svg)](https://github.com/dophamine/claude-suggest)
+[![Version](https://img.shields.io/badge/version-1.0.1-61afef.svg)](https://github.com/dophamine/claude-suggest)
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-c678dd.svg)](https://code.claude.com/docs/en/plugins/mods/overview)
 [![License: MIT](https://img.shields.io/badge/license-MIT-98c379.svg)](LICENSE)
 
@@ -78,16 +78,17 @@ terminal on your machine, not in claude.ai or the mobile app.
 ## Settings
 
 Change them in `/config` (rows starting with "Suggest ›"). The mod reloads with the new values, no restart needed.
+In the setup dialog after install, number fields start empty: leave them empty to keep the default.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `mode` | smart | Claude Code's own suggestion always shows (free). `auto`: extra replies after every reply. `smart`: only when Claude asks or offers something. `manual`: only when you run `/suggest`. |
 | `click` | send | `send`: a click sends (✎ fills the input). `fill`: a click fills the input, nothing is sent until you press Enter. |
-| `maxReplies` | 3 | Buttons shown. `1` keeps only Claude Code's own suggestion and makes no model call. |
+| `maxReplies` | 3 | Buttons shown, 1 to 5. `1` keeps only Claude Code's own suggestion and makes no model call. |
 | `model` | haiku | Model for the extra replies: haiku, sonnet or opus |
 | `effort` | low | How hard that model thinks: low, medium, high, xhigh or max |
-| `contextChars` | 6000 | How much recent conversation the model reads |
-| `messageChars` | 2500 | Longer messages keep only their last part |
+| `contextChars` | 6000 | How much recent conversation the model reads, 500 to 50,000 |
+| `messageChars` | 2500 | Longer messages keep only their last part, 200 to 20,000 |
 
 They're stored in `~/.claude/settings.json` under `pluginConfigs["suggest"].options`.
 

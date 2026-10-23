@@ -1,6 +1,7 @@
 {
   "name": "suggest",
-  "version": "1.0.0",
+  "displayName": "Suggest",
+  "version": "1.0.1",
   "description": "Clickable suggested replies under Claude's last message",
   "author": {
     "name": "Alex Pakhaliuk"
@@ -42,8 +43,10 @@
     "maxReplies": {
       "type": "number",
       "title": "Suggest › Replies",
-      "description": "Buttons shown, Claude Code's own suggestion first. 1 keeps only that one and skips the extra model call.",
-      "default": 3
+      "description": "Buttons shown, Claude Code's own suggestion first. 1 keeps only that one and skips the extra model call. Leave empty for 3.",
+      "default": 3,
+      "min": 1,
+      "max": 5
     },
     "model": {
       "type": "string",
@@ -72,14 +75,18 @@
     "contextChars": {
       "type": "number",
       "title": "Suggest › Context (characters)",
-      "description": "How much recent conversation the model reads, newest first",
-      "default": 6000
+      "description": "How much recent conversation the model reads, newest first. Leave empty for 6000.",
+      "default": 6000,
+      "min": 500,
+      "max": 50000
     },
     "messageChars": {
       "type": "number",
       "title": "Suggest › Per-message limit (characters)",
-      "description": "Longer messages keep only their tail",
-      "default": 2500
+      "description": "Longer messages keep only their tail. Leave empty for 2500.",
+      "default": 2500,
+      "min": 200,
+      "max": 20000
     }
   }
 }
