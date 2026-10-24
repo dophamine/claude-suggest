@@ -57,6 +57,26 @@ The buttons show in the terminal and in the Desktop app's Code tab. Under Remote
 - `/suggest <hint>` steers them, like `/suggest shorter` or `/suggest about testing`. All buttons then come from the model.
 - `/suggest auto`, `/suggest smart` or `/suggest manual` switches the mode.
 
+**Click a reply to send it.**
+
+<img src="assets/demo-send.svg" alt="Clicking a suggested reply sends it as the next prompt" width="630">
+
+**`✎` puts a reply in the input, to edit before you send it.**
+
+<img src="assets/demo-edit.svg" alt="Clicking the pencil fills the input with the reply, which is then extended and sent" width="630">
+
+**A slash command runs when clicked.**
+
+<img src="assets/demo-slash.svg" alt="Clicking the /compact button runs /compact" width="630">
+
+**A shell command goes in the input, ready for `!`.**
+
+<img src="assets/demo-shell.svg" alt="Clicking !npm ci puts npm ci in the input with a tip; typing ! runs it in the shell" width="630">
+
+**`/suggest <hint>` replaces the buttons with replies about the hint.**
+
+<img src="assets/demo-hint.svg" alt="Typing /suggest about testing replaces the buttons with replies about testing" width="630">
+
 ## Settings
 
 Change them in `/config` (rows starting with "Suggest ›"). The mod reloads with the new values, no restart needed. In the setup dialog after install, number fields start empty: leave them empty to keep the default.
