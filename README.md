@@ -116,6 +116,8 @@ npx prettier@3.3.3 --write .
 claude --plugin-dir .
 ```
 
+The animated demos in `assets/demo-*.svg` are drawn by `python3 scripts/demo-svgs.py`. Edit the scenes there and run it again to update them.
+
 Claude Code writes the type declarations to `.claude-plugin/types/` when it loads the folder. Issues and pull requests are welcome.
 
 ## License
