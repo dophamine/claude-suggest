@@ -49,7 +49,8 @@ const stubEngine = (on: On, modelText = '[]', { isCommandStubbed = false } = {})
     return { text: e.text }
   })
   on('prompt.fill', (_, e) => {
-    log.push(e.cursor === undefined ? `fill ${e.text}` : `fill ${e.text} cursor ${e.cursor}`)
+    const mode = e.mode === 'insert' ? ' insert' : ''
+    log.push(e.cursor === undefined ? `fill ${e.text}${mode}` : `fill ${e.text}${mode} cursor ${e.cursor}`)
     for (const d of e.decorations ?? []) {
       log.push(`tip ${d.virtualText} at ${d.start} ${d.color} dim ${d.dimColor} italic ${d.italic}`)
     }
@@ -266,6 +267,30 @@ test('a ! shell reply goes to the input without its !, the caret where the ! goe
   await ui.press({ key: 'edit-0' })
   await ui.press({ key: 'reply-0' })
   expect(log).toEqual(['fill git status cursor 0', TIP, 'fill git status cursor 0', TIP])
+  await ui.unmount()
+})
+
+// The hint line under the prompt, as Claude Code draws it in shell mode or out of it.
+const drawHint = async ($: Engine, hint: string, isDraft = false) => {
+  const ui = await $.ui.mount({
+    plugin: 'suggest',
+    component: 'PromptHint',
+    surface: 'terminal',
+    props: { hint, isDraft, isWorking: false },
+  })
+  await ui.unmount()
+}
+
+test('once the person types !, a ! shell reply goes into the shell prompt without the tip', async ($, on) => {
+  const { log, ui } = await withShellChips($, on)
+  await drawHint($, '! for shell mode')
+  await ui.press({ key: 'edit-0' })
+  // Leaving shell mode brings the tip back.
+  await drawHint($, '? for shortcuts')
+  await ui.press({ key: 'edit-0' })
+  await drawHint($, '! for shell mode')
+  await ui.press({ key: 'reply-0' })
+  expect(log).toEqual(['fill git status insert', 'fill git status cursor 0', TIP, 'fill git status insert'])
   await ui.unmount()
 })
 
