@@ -18,8 +18,9 @@ const MESSAGE = {
 } as const
 
 // Stands in for Claude Code around the plugin. The model always answers `modelText`, and `log` records
-// what the plugin sends, fills and runs. `isCommandStubbed` also answers every command the plugin runs.
-const stubEngine = (on: On, modelText = '[]', { isCommandStubbed = false } = {}) => {
+// what the plugin sends, fills and runs. `isCommandStubbed` also answers every command the plugin runs, and
+// `draft` is what the prompt holds.
+const stubEngine = (on: On, modelText = '[]', { isCommandStubbed = false, draft = '' } = {}) => {
   const log: string[] = []
   const suggested: string[] = []
   const modelPrompts: string[] = []
@@ -57,7 +58,7 @@ const stubEngine = (on: On, modelText = '[]', { isCommandStubbed = false } = {})
 
     return { isFilled: true }
   })
-  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.read', () => ({ value: { text: draft, cursor: 0 } }))
   if (isCommandStubbed) {
     on('command.run', (_, e) => {
       log.push(`run ${e.command} ${e.args}`)
@@ -112,12 +113,12 @@ const withChips = async ($: Engine, on: On) => {
 }
 
 // Buttons for the model's '! git status', 'commit it' and a bare '!', with no suggestion from Claude Code.
-const withShellChips = async ($: Engine, on: On) => {
-  const { log, suggested, clock } = stubEngine(on, '["! git status", "commit it", "!"]')
+const withShellChips = async ($: Engine, on: On, draft = '') => {
+  const { log, suggested, clock } = stubEngine(on, '["! git status", "commit it", "!"]', { draft })
   await finishTurn($)
   await clock.settle()
 
-  return { log, suggested, ui: await mountMessage($) }
+  return { log, suggested, clock, ui: await mountMessage($) }
 }
 
 test(
@@ -291,6 +292,31 @@ test('once the person types !, a ! shell reply goes into the shell prompt withou
   await drawHint($, '! for shell mode')
   await ui.press({ key: 'reply-0' })
   expect(log).toEqual(['fill git status insert', 'fill git status cursor 0', TIP, 'fill git status insert'])
+  await ui.unmount()
+})
+
+test('a ! shell reply gets the tip when the shell prompt holds a draft, or once a prompt is sent', async ($, on) => {
+  const { log, clock, ui } = await withShellChips($, on)
+  await drawHint($, '! for shell mode', true)
+  await ui.press({ key: 'edit-0' })
+  await ui.unmount()
+
+  // The hint line says shell mode, but a prompt is sent before it redraws.
+  await drawHint($, '! for shell mode')
+  await $.prompt.submit({ text: 'ls', origin: { kind: 'composer' } })
+  await finishTurn($)
+  await clock.settle()
+  const next = await mountMessage($)
+  await next.press({ key: 'edit-0' })
+  expect(log).toEqual(['fill git status cursor 0', TIP, 'submit ls', 'fill git status cursor 0', TIP])
+  await next.unmount()
+})
+
+test('a ! shell reply is not inserted into a draft the hint line has not caught up with', async ($, on) => {
+  const { log, ui } = await withShellChips($, on, 'echo hi')
+  await drawHint($, '! for shell mode')
+  await ui.press({ key: 'edit-0' })
+  expect(log).toEqual(['fill git status cursor 0', TIP])
   await ui.unmount()
 })
 
