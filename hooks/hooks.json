@@ -1,1 +1,4 @@
-{ "modules": ["./register.tsx"] }
+{
+  "description": "Shows suggested replies as buttons under Claude's last message",
+  "modules": ["./register.tsx"]
+}
