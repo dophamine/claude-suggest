@@ -136,17 +136,25 @@ async function showButtons($: EngineInterface, settings: Settings, generation: G
   return true
 }
 
-// Puts a reply in the input to edit; Enter sends it.
-async function fillInput($: EngineInterface, text: string) {
+// Puts a reply in the input to edit; Enter sends it. `isShellMode` says the person already typed `!`.
+async function fillInput($: EngineInterface, text: string, isShellMode = false) {
   if (!isShellCommand(text)) {
     await $.prompt.fill({ text })
+    return
+  }
+
+  const command = text.slice(1).trim()
+  // Inserted into the prompt shell mode already holds, the command keeps the mode, so Enter runs it. A replace
+  // would drop the mode and Enter would send the command to Claude. The hint line can lag behind the prompt, so
+  // the prompt is read too: an insert into a draft would land in the middle of it.
+  if (isShellMode && (await $.prompt.read()).text === '') {
+    await $.prompt.fill({ text: command, mode: 'insert' })
     return
   }
 
   // A filled `!` can't switch on shell mode, but typing one does. So the command goes in without its `!`,
   // with the caret at the start where the `!` goes, and a dim tip after it. The tip is not part of the draft
   // and goes away at the next edit.
-  const command = text.slice(1).trim()
   await $.prompt.fill({
     text: command,
     cursor: 0,
@@ -172,12 +180,12 @@ async function clearInputSuggestion($: EngineInterface) {
 }
 
 // Sends a reply as the person's own words, not as the plugin's message, or runs it when it is a slash command.
-async function sendReply($: EngineInterface, text: string) {
+async function sendReply($: EngineInterface, text: string, isShellMode = false) {
   await update($, buttons, () => null)
 
   // A plugin's prompt can't run in shell mode, so a `!` shell command goes to the input, never to Claude.
   if (isShellCommand(text)) {
-    await fillInput($, text)
+    await fillInput($, text, isShellMode)
     return
   }
 
@@ -202,6 +210,9 @@ async function sendReply($: EngineInterface, text: string) {
 export const register: Register = (on, options) => {
   const settings = readSettings(options)
   const generation: Generation = { current: 0 }
+  // The prompt events never say whether the prompt is in shell mode, but the hint line under the empty prompt
+  // does: it reads "! for shell mode" while it is in it. Kept per surface, since each draws its own hint line.
+  const shellModeSurfaces = new Set<string>()
 
   on('session.start', async ($, e, next) => {
     // A reload drops a model call in flight, which would leave "more suggestions…" up forever.
@@ -233,6 +244,8 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
+    // A sent prompt leaves shell mode, whether or not the hint line redraws before the next click.
+    shellModeSurfaces.clear()
     // `/suggest` reads the last reply, so its own prompt must not clear it.
     if (/^\/suggest\b/.test(e.text.trim())) return next(e)
 
@@ -275,6 +288,13 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  on('ui.render', { component: 'PromptHint' }, ($, e, next) => {
+    if (e.props.hint.includes('shell mode') && !e.props.isDraft) shellModeSurfaces.add(e.surface)
+    else shellModeSurfaces.delete(e.surface)
+
+    return next(e)
+  })
+
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const shown = await read($, buttons)
     if (!shown || e.props.isSummary || !isAnswerTail(shown.answer, e.props.text)) return next(e)
@@ -283,7 +303,10 @@ export const register: Register = (on, options) => {
     const engineSuggestion = (await read($, lastReply))?.engineSuggestion
     const isEngineSuggestion = (text: string) =>
       engineSuggestion !== undefined && replyKey(engineSuggestion) === replyKey(text)
-    const onPress = (text: string) => () => (settings.isFillOnClick ? fillInput($, text) : sendReply($, text))
+    // Shell mode is read at the press, not the draw: the person may type `!` after the buttons show.
+    const isShellMode = () => shellModeSurfaces.has(e.surface)
+    const onPress = (text: string) => () =>
+      settings.isFillOnClick ? fillInput($, text, isShellMode()) : sendReply($, text, isShellMode())
 
     const { Box, Button, Text } = $.ui.resolve(e)
 
@@ -302,7 +325,7 @@ export const register: Register = (on, options) => {
                 onPress={onPress(text)}
               />
               {settings.isFillOnClick ? null : (
-                <Button key={`edit-${i}`} label="✎" plain dimColor onPress={() => fillInput($, text)} />
+                <Button key={`edit-${i}`} label="✎" plain dimColor onPress={() => fillInput($, text, isShellMode())} />
               )}
             </Box>
           ))}
