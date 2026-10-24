@@ -5,7 +5,8 @@
 **Clickable suggested replies for Claude Code.**<br>
 When Claude finishes a reply, the answers you'd most likely give show as buttons under it. Click one to send it.
 
-[![Version](https://img.shields.io/badge/version-1.0.7-61afef.svg)](https://github.com/dophamine/claude-suggest)
+[![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdophamine%2Fclaude-suggest%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=version&color=61afef)](https://github.com/dophamine/claude-suggest)
+[![CI](https://img.shields.io/github/actions/workflow/status/dophamine/claude-suggest/ci.yml?branch=main&label=CI)](https://github.com/dophamine/claude-suggest/actions/workflows/ci.yml)
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-c678dd.svg)](https://code.claude.com/docs/en/plugins/mods/overview)
 [![License: MIT](https://img.shields.io/badge/license-MIT-98c379.svg)](LICENSE)
 
