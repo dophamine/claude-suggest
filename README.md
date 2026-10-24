@@ -9,7 +9,13 @@ When Claude finishes a reply, the answers you'd most likely give show as buttons
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-c678dd.svg)](https://code.claude.com/docs/en/plugins/mods/overview)
 [![License: MIT](https://img.shields.io/badge/license-MIT-98c379.svg)](LICENSE)
 
-<img src="assets/demo.gif" alt="Suggested replies as buttons under Claude's last message" width="630">
+<img src="assets/demo-send.svg" alt="Suggested replies as buttons under Claude's last message; clicking one sends it" width="630">
+
+<details>
+<summary>Watch a real recording</summary>
+<br>
+<img src="assets/demo.gif" alt="Screen recording of Suggest in a Claude Code session" width="630">
+</details>
 
 </div>
 
@@ -56,10 +62,6 @@ The buttons show in the terminal and in the Desktop app's Code tab. Under Remote
 - `/suggest` shows buttons under Claude's last reply now, in any mode. Nothing is sent to the session.
 - `/suggest <hint>` steers them, like `/suggest shorter` or `/suggest about testing`. All buttons then come from the model.
 - `/suggest auto`, `/suggest smart` or `/suggest manual` switches the mode.
-
-**Click a reply to send it.**
-
-<img src="assets/demo-send.svg" alt="Clicking a suggested reply sends it as the next prompt" width="630">
 
 **`✎` puts a reply in the input, to edit before you send it.**
 
