@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Pinned so a CLI release can't change the checks under us; bump on purpose
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.310
+
+      # The plugin directory's submission checks, with warnings as errors
+      - name: Validate plugin
+        run: claude plugin validate . --profile directory --strict
+
+      - name: Run tests
+        run: claude plugin test .
+
+      - name: Check formatting
+        run: npx --yes prettier@3.3.3 --check .
