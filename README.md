@@ -8,6 +8,8 @@ When Claude finishes a reply, the answers you'd most likely give show as buttons
 [![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdophamine%2Fclaude-suggest%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=version&color=61afef)](https://github.com/dophamine/claude-suggest)
 [![CI](https://img.shields.io/github/actions/workflow/status/dophamine/claude-suggest/ci.yml?branch=main&label=CI)](https://github.com/dophamine/claude-suggest/actions/workflows/ci.yml)
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-c678dd.svg)](https://code.claude.com/docs/en/plugins/mods/overview)
+[![reach](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/dophamine--claude-suggest--suggest-reach.svg)](https://mods.aidojo.si/mods/dophamine--claude-suggest--suggest/)
+[![validates](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/dophamine--claude-suggest--suggest-validates.svg)](https://mods.aidojo.si/mods/dophamine--claude-suggest--suggest/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-98c379.svg)](LICENSE)
 
 <img src="assets/demo-send.svg" alt="Suggested replies as buttons under Claude's last message; clicking one sends it" width="630">
